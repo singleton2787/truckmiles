@@ -600,20 +600,38 @@
 
         document.getElementById('loadForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            addLoad();
+        });
+
+        document.getElementById('expenseForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            addExpense();
+        });
+
+        function addLoad() {
+            var loadNumber = document.getElementById('loadNumber').value || '';
+            var date = document.getElementById('date').value || '';
+            var miles = parseInt(document.getElementById('miles').value) || 0;
+            var origin = document.getElementById('origin').value || '';
+            var destination = document.getElementById('destination').value || '';
+            var notes = document.getElementById('notes').value || '';
             
-            var formData = new FormData(e.target);
-            var miles = parseInt(formData.get('miles')) || 0;
+            if (!date || miles <= 0) {
+                alert('Please enter a valid date and miles');
+                return;
+            }
+            
             var pay = calculatePay(miles);
             
             var load = {
                 id: Date.now(),
                 type: 'load',
-                loadNumber: formData.get('loadNumber') || '',
-                date: formData.get('date') || '',
+                loadNumber: loadNumber,
+                date: date,
                 miles: miles,
-                origin: formData.get('origin') || '',
-                destination: formData.get('destination') || '',
-                notes: formData.get('notes') || '',
+                origin: origin,
+                destination: destination,
+                notes: notes,
                 revenue: pay
             };
             
@@ -624,21 +642,28 @@
             updateDisplay();
             clearForm();
             alert('Load added successfully!');
-        });
+        }
 
-        document.getElementById('expenseForm').addEventListener('submit', function(e) {
-            e.preventDefault();
+        function addExpense() {
+            var date = document.getElementById('expenseDate').value || '';
+            var category = document.getElementById('expenseCategory').value || '';
+            var amount = parseFloat(document.getElementById('expenseAmount').value) || 0;
+            var miles = document.getElementById('expenseMiles').value ? parseInt(document.getElementById('expenseMiles').value) : null;
+            var notes = document.getElementById('expenseNotes').value || '';
             
-            var formData = new FormData(e.target);
+            if (!date || !category || amount <= 0) {
+                alert('Please fill in date, category, and amount');
+                return;
+            }
             
             var expense = {
                 id: Date.now(),
                 type: 'expense',
-                date: formData.get('expenseDate') || '',
-                category: formData.get('expenseCategory') || '',
-                amount: parseFloat(formData.get('expenseAmount')) || 0,
-                miles: formData.get('expenseMiles') ? parseInt(formData.get('expenseMiles')) : null,
-                notes: formData.get('expenseNotes') || ''
+                date: date,
+                category: category,
+                amount: amount,
+                miles: miles,
+                notes: notes
             };
             
             var data = loadData();
@@ -648,7 +673,7 @@
             updateDisplay();
             clearExpenseForm();
             alert('Expense added successfully!');
-        });
+        }
 
         function clearForm() {
             document.getElementById('loadForm').reset();
