@@ -441,8 +441,8 @@
                         <strong id="weeklyRevenue">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
-                        <p>Breakeven Target:</p>
-                        <strong id="breakevenTarget">$0.00</strong>
+                        <p>Total Weekly Costs:</p>
+                        <strong id="totalWeeklyCosts">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
                         <p>Weekly Profit:</p>
@@ -575,7 +575,7 @@
                         
                         <div class="form-group">
                             <input type="checkbox" id="includeLease" checked>
-                            <label for="includeLease" style="display: inline;">Include this week's lease payment?</label>
+                            <label for="includeLease" style="display: inline;">Include this week's truck payment? (\$835)</label>
                         </div>
                         
                         <button type="submit" class="btn btn-success">Add Expense</button>
@@ -897,12 +897,14 @@
         }
 
         function updateWeeklyGauge() {
-            var data = loadData();
-            const BREAKEVEN_TARGET_TOTAL = 1443;
-            const BREAKEVEN_TARGET_NO_LEASE = 1443 - 835;
+            if (!weeklyGaugeChart) initializeWeeklyGauge();
 
+            var data = loadData();
+            const FIXED_COSTS_WEEKLY = 277;
+            const TRUCK_PAYMENT_WEEKLY = 835;
+            const VARIABLE_COST_PER_MILE = 0.372;
+            
             var includeLease = document.getElementById('includeLease').checked;
-            var effectiveBreakevenTarget = includeLease ? BREAKEVEN_TARGET_TOTAL : BREAKEVEN_TARGET_NO_LEASE;
             
             var now = new Date();
             var weekStart = new Date(now);
@@ -914,25 +916,42 @@
                 return loadDate >= weekStart;
             }).reduce((sum, load) => sum + (load.revenue || 0), 0);
 
-            var weeklyProfit = weeklyRevenue - effectiveBreakevenTarget;
+            var weeklyMiles = data.loads.filter(load => {
+                var loadDate = new Date(load.date);
+                return loadDate >= weekStart;
+            }).reduce((sum, load) => sum + (load.miles || 0), 0);
+
+            var totalFixedCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
+            var totalVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
+            var totalWeeklyCosts = totalFixedCosts + totalVariableCosts;
+            var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
             
-            let progress = weeklyRevenue / effectiveBreakevenTarget;
-            let lossSlice = Math.min(100, Math.max(0, (1 - progress) * 50));
-            let profitSlice = 100 - lossSlice;
-            
-            weeklyGaugeChart.data.datasets[0].data = [lossSlice, profitSlice];
-            weeklyGaugeChart.data.datasets[0].backgroundColor = [
-                lossSlice > 50 ? '#e74c3c' : '#f1c40f', 
-                '#27ae60'
-            ];
+            let gaugeValue = 0;
+            const MAX_GAUGE_RANGE = 2000; // Define a max profit to scale the gauge
+
+            if (weeklyProfit <= 0) {
+                // If at a loss, scale from -90 to 0 degrees based on ratio to fixed costs
+                gaugeValue = Math.min(100, Math.max(0, (weeklyRevenue / totalWeeklyCosts) * 50));
+                weeklyGaugeChart.data.datasets[0].data = [gaugeValue, 100 - gaugeValue];
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, '#dcdcdc'];
+            } else {
+                // If in profit, scale from 0 to 90 degrees based on profit amount
+                let profitRatio = Math.min(weeklyProfit / MAX_GAUGE_RANGE, 1);
+                gaugeValue = 50 + (profitRatio * 50);
+                weeklyGaugeChart.data.datasets[0].data = [50, gaugeValue - 50, 100 - gaugeValue];
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, `#27ae60`, '#dcdcdc'];
+            }
+
             weeklyGaugeChart.update();
 
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
-            document.getElementById('breakevenTarget').textContent = '$' + effectiveBreakevenTarget.toFixed(2);
+            document.getElementById('totalWeeklyCosts').textContent = '$' + totalWeeklyCosts.toFixed(2);
             document.getElementById('weeklyProfit').textContent = '$' + weeklyProfit.toFixed(2);
         }
 
         function updateIncentiveGauge() {
+            if (!incentiveGaugeChart) initializeIncentiveGauge();
+
             var data = loadData();
             var now = new Date();
             var fourWeeksAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 28);
@@ -943,37 +962,39 @@
 
             let milesToNextTier = 0;
             let incentiveRate = 0;
-            let tier1Miles = 4000;
-            let tier2Miles = 6000;
-            let tier3Miles = 8000;
+            let totalMilesForGauge = 8000;
             
-            let slice1 = 0, slice2 = 0, slice3 = 0, slice4 = 0;
+            let slice1 = 0, slice2 = 0, slice3 = 0, slice4 = 0, remaining = 0;
+            let tiers = [4000, 6000, 8000];
 
-            if (fourWeekMiles >= tier3Miles) {
+            if (fourWeekMiles >= tiers[2]) {
                 incentiveRate = 0.07;
                 milesToNextTier = 0;
-                slice1 = tier1Miles;
-                slice2 = tier2Miles - tier1Miles;
-                slice3 = tier3Miles - tier2Miles;
-                slice4 = fourWeekMiles - tier3Miles;
-            } else if (fourWeekMiles >= tier2Miles) {
+                slice1 = tiers[0];
+                slice2 = tiers[1] - tiers[0];
+                slice3 = tiers[2] - tiers[1];
+                slice4 = fourWeekMiles - tiers[2];
+            } else if (fourWeekMiles >= tiers[1]) {
                 incentiveRate = 0.06;
-                milesToNextTier = tier3Miles - fourWeekMiles;
-                slice1 = tier1Miles;
-                slice2 = tier2Miles - tier1Miles;
-                slice3 = fourWeekMiles - tier2Miles;
-            } else if (fourWeekMiles >= tier1Miles) {
+                milesToNextTier = tiers[2] - fourWeekMiles;
+                slice1 = tiers[0];
+                slice2 = tiers[1] - tiers[0];
+                slice3 = fourWeekMiles - tiers[1];
+                remaining = totalMilesForGauge - fourWeekMiles;
+            } else if (fourWeekMiles >= tiers[0]) {
                 incentiveRate = 0.05;
-                milesToNextTier = tier2Miles - fourWeekMiles;
-                slice1 = tier1Miles;
-                slice2 = fourWeekMiles - tier1Miles;
+                milesToNextTier = tiers[1] - fourWeekMiles;
+                slice1 = tiers[0];
+                slice2 = fourWeekMiles - tiers[0];
+                remaining = totalMilesForGauge - fourWeekMiles;
             } else {
                 incentiveRate = 0.00;
-                milesToNextTier = tier1Miles - fourWeekMiles;
+                milesToNextTier = tiers[0] - fourWeekMiles;
                 slice1 = fourWeekMiles;
+                remaining = totalMilesForGauge - fourWeekMiles;
             }
-
-            incentiveGaugeChart.data.datasets[0].data = [slice1, slice2, slice3, slice4, Math.max(0, tier3Miles - fourWeekMiles)];
+            
+            incentiveGaugeChart.data.datasets[0].data = [slice1, slice2, slice3, slice4, remaining];
             incentiveGaugeChart.data.datasets[0].backgroundColor = [`#dcdcdc`, `#f1c40f`, `#27ae60`, `#3498db`, `#ffffff`];
             incentiveGaugeChart.update();
             
@@ -1116,7 +1137,6 @@
                 }
             }
         }
-
     </script>
 </body>
 </html>
