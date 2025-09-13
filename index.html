@@ -371,6 +371,21 @@
             background: #f8f9fa;
         }
 
+        #dataDisplayArea {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-top: 20px;
+            overflow: auto;
+            max-height: 500px;
+            text-align: left;
+        }
+
         @media (max-width: 768px) {
             .container {
                 margin: 5px;
@@ -652,11 +667,13 @@
                 <div class="section">
                     <h2>Data Management</h2>
                     <button type="button" class="btn" onclick="exportData()">Export Data</button>
+                    <button type="button" class="btn" onclick="showRawData()">View Raw Data</button>
                     <button type="button" class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
                     <div style="margin-top: 10px;">
                         <input type="file" id="importFile" accept=".json" onchange="importData(event)" style="display: none;">
                         <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import Data</button>
                     </div>
+                    <pre><code id="dataDisplayArea"></code></pre>
                 </div>
             </div>
         </div>
@@ -832,7 +849,6 @@
         var weeklyGaugeChart = null;
         var incentiveGaugeChart = null;
         
-        // This runs once when the page loads
         document.addEventListener('DOMContentLoaded', function() {
             initializeWeeklyGauge();
             initializeIncentiveGauge();
@@ -963,7 +979,8 @@
 
             var totalFixedCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
             var totalVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
-            var totalWeeklyCosts = totalFixedCosts + totalVariableCosts;
+            var manuallyEnteredExpenses = data.expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+            var totalWeeklyCosts = totalFixedCosts + totalVariableCosts + manuallyEnteredExpenses;
             var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
             
             let gaugeValue = 0;
@@ -1183,6 +1200,12 @@
                     alert('All data cleared');
                 }
             }
+        }
+
+        function showRawData() {
+            var data = loadData();
+            var formattedData = JSON.stringify(data, null, 2);
+            document.getElementById('dataDisplayArea').textContent = formattedData;
         }
     </script>
 </body>
