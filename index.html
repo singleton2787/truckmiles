@@ -283,6 +283,10 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
 
+        .history-item.expense-item {
+            border-left-color: #e74c3c;
+        }
+
         .history-item h3 {
             color: #2c3e50;
             margin-bottom: 10px;
@@ -434,8 +438,8 @@
                 <p>Total Miles</p>
             </div>
             <div class="stat-card">
-                <h3 id="totalLoads">0</h3>
-                <p>Total Loads</p>
+                <h3 id="avgCPM">$0.00</h3>
+                <p>Avg. CPM</p>
             </div>
             <div class="stat-card">
                 <h3 id="avgProfitPerMile">$0.00</h3>
@@ -840,21 +844,36 @@
             var data = loadData();
             
             var totalRevenue = data.loads.reduce((sum, load) => sum + (load.revenue || 0), 0);
-            var totalExpenses = data.expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
-            var netProfit = totalRevenue - totalExpenses;
             var totalMiles = data.loads.reduce((sum, load) => sum + (load.miles || 0), 0);
             var totalLoads = data.loads.length;
-            var avgProfitPerMile = totalMiles > 0 ? netProfit / totalMiles : 0;
+
+            const VARIABLE_COST_PER_MILE = 0.372;
+            const FIXED_COSTS_WEEKLY = 277;
+            const TRUCK_PAYMENT_WEEKLY = 835;
+            
+            var calculatedFixedCosts = FIXED_COSTS_WEEKLY;
+            var includeLease = document.getElementById('includeLease').checked;
+            if(includeLease) {
+                calculatedFixedCosts += TRUCK_PAYMENT_WEEKLY;
+            }
+
+            var calculatedVariableCosts = totalMiles * VARIABLE_COST_PER_MILE;
+            var totalExpenses = data.expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+            var overallTotalCosts = calculatedFixedCosts + calculatedVariableCosts + totalExpenses;
+            var overallNetProfit = totalRevenue - overallTotalCosts;
+            var avgCPM = totalMiles > 0 ? overallTotalCosts / totalMiles : 0;
+            var avgProfitPerMile = totalMiles > 0 ? overallNetProfit / totalMiles : 0;
             
             document.getElementById('totalRevenue').textContent = '$' + totalRevenue.toFixed(2);
-            document.getElementById('totalExpenses').textContent = '$' + totalExpenses.toFixed(2);
-            document.getElementById('netProfit').textContent = '$' + netProfit.toFixed(2);
+            document.getElementById('totalExpenses').textContent = '$' + overallTotalCosts.toFixed(2);
+            document.getElementById('netProfit').textContent = '$' + overallNetProfit.toFixed(2);
             document.getElementById('totalMiles').textContent = totalMiles.toLocaleString();
             document.getElementById('totalLoads').textContent = totalLoads;
+            document.getElementById('avgCPM').textContent = '$' + avgCPM.toFixed(3);
             document.getElementById('avgProfitPerMile').textContent = '$' + avgProfitPerMile.toFixed(3);
-            
+
             var profitCard = document.getElementById('netProfit').parentElement;
-            if (netProfit >= 0) {
+            if (overallNetProfit >= 0) {
                 profitCard.className = 'stat-card profit';
             } else {
                 profitCard.className = 'stat-card expense';
@@ -921,7 +940,7 @@
             if (!weeklyGaugeChart) initializeWeeklyGauge();
 
             var data = loadData();
-            const BASE_FIXED_COSTS_WEEKLY = 277;
+            const FIXED_COSTS_WEEKLY = 277;
             const TRUCK_PAYMENT_WEEKLY = 835;
             const VARIABLE_COST_PER_MILE = 0.372;
             
@@ -942,37 +961,25 @@
                 return loadDate >= weekStart;
             }).reduce((sum, load) => sum + (load.miles || 0), 0);
 
-            var totalFixedCosts = BASE_FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
+            var totalFixedCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
             var totalVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
             var totalWeeklyCosts = totalFixedCosts + totalVariableCosts;
             var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
             
             let gaugeValue = 0;
-            let totalFixedCostsAtBreakeven = 1433;
+            const MAX_GAUGE_RANGE = 2000;
 
-            if(includeLease) {
-                totalFixedCostsAtBreakeven = 2268;
-            }
-
-            let breakevenPointRevenue = totalFixedCostsAtBreakeven;
-            let revenueToBreakevenRatio = weeklyRevenue / breakevenPointRevenue;
-
-            gaugeValue = Math.min(100, Math.max(0, revenueToBreakevenRatio * 100));
-
-            let colorSlice1 = gaugeValue > 50 ? '#f1c40f' : '#e74c3c';
-            let colorSlice2 = gaugeValue > 50 ? '#27ae60' : '#ffffff';
-            let data1 = Math.min(50, gaugeValue);
-            let data2 = Math.max(0, gaugeValue - 50);
-            let data3 = 100 - gaugeValue;
-
-            if (data2 > 0) {
-                weeklyGaugeChart.data.datasets[0].data = [data1, data2, data3];
-                weeklyGaugeChart.data.datasets[0].backgroundColor = [colorSlice1, colorSlice2, '#ffffff'];
+            if (weeklyProfit <= 0) {
+                gaugeValue = Math.min(100, Math.max(0, (weeklyRevenue / totalWeeklyCosts) * 50));
+                weeklyGaugeChart.data.datasets[0].data = [gaugeValue, 100 - gaugeValue];
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, '#dcdcdc'];
             } else {
-                weeklyGaugeChart.data.datasets[0].data = [data1, data3];
-                weeklyGaugeChart.data.datasets[0].backgroundColor = [colorSlice1, '#ffffff'];
+                let profitRatio = Math.min(weeklyProfit / MAX_GAUGE_RANGE, 1);
+                gaugeValue = 50 + (profitRatio * 50);
+                weeklyGaugeChart.data.datasets[0].data = [50, gaugeValue - 50, 100 - gaugeValue];
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, `#27ae60`, '#dcdcdc'];
             }
-            
+
             weeklyGaugeChart.update();
 
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
@@ -1025,19 +1032,22 @@
                 slice1 = fourWeekMiles;
                 remaining = totalMilesForGauge - fourWeekMiles;
             }
-            
+
             incentiveGaugeChart.data.datasets[0].data = [slice1, slice2, slice3, slice4, remaining];
             incentiveGaugeChart.data.datasets[0].backgroundColor = [`#dcdcdc`, `#f1c40f`, `#27ae60`, `#3498db`, `#ffffff`];
             incentiveGaugeChart.update();
             
+            var totalIncentivePay = fourWeekMiles * incentiveRate;
             document.getElementById('fourWeekMiles').textContent = fourWeekMiles.toLocaleString();
             document.getElementById('incentiveRate').textContent = '$' + incentiveRate.toFixed(2);
             document.getElementById('milesToNextTier').textContent = milesToNextTier.toLocaleString();
+            document.getElementById('totalIncentivePay').textContent = '$' + totalIncentivePay.toFixed(2);
         }
 
         function updateHistoryDisplay() {
             var data = loadData();
             var historyContainer = document.getElementById('historyContainer');
+            const VARIABLE_COST_PER_MILE = 0.372;
             
             var items = [];
             
@@ -1069,8 +1079,10 @@
                     var notes = item.notes || '';
                     var miles = item.miles || 0;
                     var revenue = item.revenue || 0;
-                    var perMile = miles > 0 ? (revenue / miles) : 0;
-                    
+                    var revenuePerMile = miles > 0 ? (revenue / miles) : 0;
+                    var costPerMile = miles > 0 ? VARIABLE_COST_PER_MILE : 0;
+                    var profitPerMile = revenuePerMile - costPerMile;
+
                     htmlContent += `<div class="history-item">`;
                     htmlContent += `<button class="delete-btn" onclick="deleteItem(${item.id}, 'load')">Delete</button>`;
                     htmlContent += `<h3>Load - ${new Date(item.date).toLocaleDateString()}`;
@@ -1081,7 +1093,9 @@
                     htmlContent += `<div class="details">`;
                     htmlContent += `<div class="detail-item"><strong>${miles}</strong><span>Miles</span></div>`;
                     htmlContent += `<div class="detail-item"><strong>$${revenue.toFixed(2)}</strong><span>Revenue</span></div>`;
-                    htmlContent += `<div class="detail-item"><strong>$${perMile.toFixed(3)}</strong><span>Per Mile</span></div>`;
+                    htmlContent += `<div class="detail-item"><strong>$${revenuePerMile.toFixed(3)}</strong><span>Revenue/Mile</span></div>`;
+                    htmlContent += `<div class="detail-item"><strong>$${costPerMile.toFixed(3)}</strong><span>Var. Cost/Mile</span></div>`;
+                    htmlContent += `<div class="detail-item"><strong>$${profitPerMile.toFixed(3)}</strong><span>Profit/Mile</span></div>`;
                     htmlContent += `</div>`;
                     if (origin !== 'N/A' || destination !== 'N/A') {
                         htmlContent += `<p><strong>Route:</strong> ${origin} to ${destination}</p>`;
@@ -1096,9 +1110,10 @@
                     var amount = item.amount || 0;
                     var miles = item.miles || 0;
                     
-                    htmlContent += `<div class="history-item" style="border-left-color: #e74c3c;">`;
+                    htmlContent += `<div class="history-item expense-item">`;
                     htmlContent += `<button class="delete-btn" onclick="deleteItem(${item.id}, 'expense')">Delete</button>`;
-                    htmlContent += `<h3>Expense - ${new Date(item.date).toLocaleDateString()}</h3>`;
+                    htmlContent += `<h3>Expense - ${new Date(item.date).toLocaleDateString()}`;
+                    htmlContent += `</h3>`;
                     htmlContent += `<div class="details">`;
                     htmlContent += `<div class="detail-item"><strong>${categoryName}</strong><span>Category</span></div>`;
                     htmlContent += `<div class="detail-item"><strong>$${amount.toFixed(2)}</strong><span>Amount</span></div>`;
