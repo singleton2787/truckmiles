@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trucking Business Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {
             margin: 0;
@@ -81,7 +82,6 @@
             font-size: 0.9em;
         }
 
-        /* NEW Weekly Gauge Styles */
         .gauge-container {
             padding: 20px;
             background: #f8f9fa;
@@ -104,84 +104,7 @@
             color: #2c3e50;
             margin-bottom: 20px;
         }
-
-        .gauge-chart-wrapper {
-            position: relative;
-            width: 250px;
-            height: 125px;
-            margin: 0 auto;
-            overflow: hidden;
-        }
-
-        .gauge-fill {
-            position: absolute;
-            width: 250px;
-            height: 250px;
-            border-radius: 50%;
-            top: 0;
-            left: 0;
-            background: conic-gradient(
-                #e74c3c 0% 50%, 
-                #27ae60 50% 100%
-            );
-            transform: rotate(-90deg);
-        }
-
-        #incentiveGaugeFill {
-            background: conic-gradient(
-                #e74c3c 0% 50%, 
-                #f1c40f 50% 75%, 
-                #27ae60 75% 100%
-            );
-        }
-
-        .gauge-mask {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 50%;
-            left: 0;
-            background-color: white;
-            z-index: 1;
-        }
-
-        .gauge-needle {
-            position: absolute;
-            bottom: 5px;
-            left: 50%;
-            width: 6px;
-            height: 120px;
-            background: #34495e;
-            transform-origin: bottom center;
-            transition: transform 0.8s ease-in-out;
-            z-index: 2;
-            border-radius: 3px;
-        }
-
-        .gauge-needle::before {
-            content: '';
-            position: absolute;
-            top: -10px;
-            left: -7px;
-            width: 20px;
-            height: 20px;
-            background: #34495e;
-            border-radius: 50%;
-            border: 2px solid white;
-        }
-
-        .gauge-label {
-            position: absolute;
-            bottom: 5px;
-            color: #2c3e50;
-            font-weight: bold;
-            font-size: 0.9em;
-            z-index: 3;
-        }
-        .gauge-label.left { left: 0; }
-        .gauge-label.center { left: 50%; transform: translateX(-50%); }
-        .gauge-label.right { right: 0; }
-
+        
         .gauge-info {
             display: flex;
             justify-content: space-around;
@@ -509,13 +432,8 @@
         <div class="gauge-container">
             <div class="gauge-card">
                 <h2>Weekly Revenue Status</h2>
-                <div class="gauge-chart-wrapper">
-                    <div class="gauge-fill"></div>
-                    <div class="gauge-mask"></div>
-                    <div class="gauge-needle" id="weeklyGaugeNeedle"></div>
-                    <div class="gauge-label left">Loss</div>
-                    <div class="gauge-label center">Breakeven</div>
-                    <div class="gauge-label right">Profit</div>
+                <div style="height: 150px;">
+                    <canvas id="weeklyGaugeCanvas"></canvas>
                 </div>
                 <div class="gauge-info">
                     <div class="gauge-info-item">
@@ -535,13 +453,8 @@
 
             <div class="gauge-card">
                 <h2>Monthly Incentive Status</h2>
-                <div class="gauge-chart-wrapper">
-                    <div class="gauge-fill" id="incentiveGaugeFill"></div>
-                    <div class="gauge-mask"></div>
-                    <div class="gauge-needle" id="incentiveGaugeNeedle"></div>
-                    <div class="gauge-label left">0</div>
-                    <div class="gauge-label center">4000</div>
-                    <div class="gauge-label right">8000+</div>
+                <div style="height: 150px;">
+                    <canvas id="incentiveGaugeCanvas"></canvas>
                 </div>
                 <div class="gauge-info">
                     <div class="gauge-info-item">
@@ -910,12 +823,76 @@
             }
             
             updateHistoryDisplay();
-            updateWeeklyGauge(data);
-            updateIncentiveGauge(data);
+            updateWeeklyGauge();
+            updateIncentiveGauge();
         }
 
-        function updateWeeklyGauge(data) {
-            // Breakeven point for business and personal expenses, based on your Profit Plan.
+        // Initialize charts (to be called once)
+        var weeklyGaugeChart = null;
+        var incentiveGaugeChart = null;
+
+        function initializeWeeklyGauge() {
+            const ctx = document.getElementById('weeklyGaugeCanvas').getContext('2d');
+            weeklyGaugeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [0, 100],
+                        backgroundColor: ['#e74c3c', '#ffffff'],
+                        borderWidth: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    rotation: -90,
+                    circumference: 180,
+                    cutout: '80%',
+                    plugins: {
+                        tooltip: {
+                            enabled: false
+                        },
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function initializeIncentiveGauge() {
+            const ctx = document.getElementById('incentiveGaugeCanvas').getContext('2d');
+            incentiveGaugeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [0, 4000, 2000, 2000],
+                        backgroundColor: ['#dcdcdc', '#e74c3c', '#f1c40f', '#27ae60'],
+                        borderWidth: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    rotation: -90,
+                    circumference: 180,
+                    cutout: '80%',
+                    plugins: {
+                        tooltip: {
+                            enabled: false
+                        },
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateWeeklyGauge() {
+            if (!weeklyGaugeChart) initializeWeeklyGauge();
+
+            var data = loadData();
             const BREAKEVEN_REVENUE_TARGET = 1552;
             
             var now = new Date();
@@ -933,35 +910,34 @@
             });
 
             var weeklyProfit = weeklyRevenue - BREAKEVEN_REVENUE_TARGET;
-            
-            // Calculate needle rotation based on profit/loss
-            let needleAngle;
-            const MAX_PROFIT_FOR_GAUGE = 2000;
-            
-            if (weeklyProfit <= 0) {
-                // Not profitable: needle moves from center (0deg) to left (-90deg)
-                let progress = weeklyProfit / (BREAKEVEN_REVENUE_TARGET + 500); // Add a buffer for significant loss
-                needleAngle = 90 * progress;
+
+            let progress = weeklyProfit / BREAKEVEN_REVENUE_TARGET;
+            let gaugeValue = 0;
+
+            if (progress < 0) {
+                gaugeValue = Math.min(100, Math.max(0, (weeklyRevenue / BREAKEVEN_REVENUE_TARGET) * 100));
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, '#ffffff'];
+                weeklyGaugeChart.data.datasets[0].data = [gaugeValue, 100 - gaugeValue];
             } else {
-                // Profitable: needle moves from center (0deg) to right (90deg)
-                let progress = Math.min(weeklyProfit / MAX_PROFIT_FOR_GAUGE, 1);
-                needleAngle = progress * 90;
+                gaugeValue = 50 + Math.min(50, (weeklyProfit / BREAKEVEN_REVENUE_TARGET) * 50);
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, `#27ae60`, '#ffffff'];
+                weeklyGaugeChart.data.datasets[0].data = [50, gaugeValue - 50, 100 - gaugeValue];
             }
+
+            weeklyGaugeChart.update();
             
-            document.getElementById('weeklyGaugeNeedle').style.transform = `rotate(${needleAngle}deg)`;
-            
-            // Update labels
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
             document.getElementById('breakevenTarget').textContent = '$' + BREAKEVEN_REVENUE_TARGET.toFixed(2);
             document.getElementById('weeklyProfit').textContent = '$' + weeklyProfit.toFixed(2);
         }
 
-        function updateIncentiveGauge(data) {
+        function updateIncentiveGauge() {
+            if (!incentiveGaugeChart) initializeIncentiveGauge();
+
+            var data = loadData();
             var now = new Date();
             var fourWeeksAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 28);
-
             var fourWeekMiles = 0;
-            var incentiveRate = 0;
             
             data.loads.forEach(load => {
                 var loadDate = new Date(load.date);
@@ -970,33 +946,32 @@
                 }
             });
 
-            // Determine incentive rate and miles for next tier based on document
+            let tierProgress = 0;
             let milesToNextTier = 0;
-            let gaugeProgress = 0;
+            let incentiveRate = 0;
 
             if (fourWeekMiles >= 8000) {
                 incentiveRate = 0.07;
                 milesToNextTier = 0;
-                gaugeProgress = 1;
+                tierProgress = 1;
             } else if (fourWeekMiles >= 6000) {
                 incentiveRate = 0.06;
                 milesToNextTier = 8000 - fourWeekMiles;
-                gaugeProgress = 0.75 + (fourWeekMiles - 6000) / 2000 * 0.25;
+                tierProgress = 0.75 + (fourWeekMiles - 6000) / 2000 * 0.25;
             } else if (fourWeekMiles >= 4000) {
                 incentiveRate = 0.05;
                 milesToNextTier = 6000 - fourWeekMiles;
-                gaugeProgress = 0.5 + (fourWeekMiles - 4000) / 2000 * 0.25;
+                tierProgress = 0.5 + (fourWeekMiles - 4000) / 2000 * 0.25;
             } else {
                 incentiveRate = 0.00;
                 milesToNextTier = 4000 - fourWeekMiles;
-                gaugeProgress = fourWeekMiles / 4000 * 0.5;
+                tierProgress = fourWeekMiles / 4000 * 0.5;
             }
 
-            const totalIncentive = fourWeekMiles * incentiveRate;
-            let needleAngle = (gaugeProgress * 180) - 90;
+            incentiveGaugeChart.data.datasets[0].data = [fourWeekMiles, milesToNextTier];
+            incentiveGaugeChart.data.datasets[0].backgroundColor = [`#dcdcdc`, `#e74c3c`, `#f1c40f`, `#27ae60`];
+            incentiveGaugeChart.update();
             
-            document.getElementById('incentiveGaugeNeedle').style.transform = `rotate(${needleAngle}deg)`;
-
             document.getElementById('fourWeekMiles').textContent = fourWeekMiles.toLocaleString();
             document.getElementById('incentiveRate').textContent = '$' + incentiveRate.toFixed(2);
             document.getElementById('milesToNextTier').textContent = milesToNextTier.toLocaleString();
