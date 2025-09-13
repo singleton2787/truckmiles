@@ -987,7 +987,11 @@
             const MAX_GAUGE_RANGE = 2000;
 
             if (weeklyProfit <= 0) {
-                gaugeValue = Math.min(100, Math.max(0, (weeklyRevenue / totalWeeklyCosts) * 50));
+                if (totalWeeklyCosts > 0) {
+                    gaugeValue = Math.min(100, Math.max(0, (weeklyRevenue / totalWeeklyCosts) * 50));
+                } else {
+                    gaugeValue = 0;
+                }
                 weeklyGaugeChart.data.datasets[0].data = [gaugeValue, 100 - gaugeValue];
                 weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, '#dcdcdc'];
             } else {
