@@ -858,8 +858,8 @@
             }
 
             var calculatedVariableCosts = totalMiles * VARIABLE_COST_PER_MILE;
-            var totalExpenses = data.expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
-            var overallTotalCosts = calculatedFixedCosts + calculatedVariableCosts + totalExpenses;
+            var manuallyEnteredExpenses = data.expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+            var overallTotalCosts = calculatedFixedCosts + calculatedVariableCosts + manuallyEnteredExpenses;
             var overallNetProfit = totalRevenue - overallTotalCosts;
             var avgCPM = totalMiles > 0 ? overallTotalCosts / totalMiles : 0;
             var avgProfitPerMile = totalMiles > 0 ? overallNetProfit / totalMiles : 0;
