@@ -1150,16 +1150,13 @@
             var data = loadData();
             var now = new Date();
             
-            var currentCycleEnd = new Date(now);
-            currentCycleEnd.setDate(now.getDate() + (2 - now.getDay())); 
-            currentCycleEnd.setHours(23, 59, 59, 999);
-            
-            if (now.getDay() === 3 && now.getHours() < 6) { // Special case for early Wednesday drops
-                currentCycleEnd.setDate(currentCycleEnd.getDate() - 7);
-            }
+            // Pay cycle runs Wednesday to Tuesday
+            var currentPayCycleEnd = new Date(now);
+            currentPayCycleEnd.setDate(now.getDate() + (2 - now.getDay())); // Get to next Tuesday
+            currentPayCycleEnd.setHours(23, 59, 59, 999); // Set to midnight Tuesday
 
-            var nextCycleStart = new Date(currentCycleEnd);
-            nextCycleStart.setDate(currentCycleEnd.getDate() + 1);
+            var nextPayCycleStart = new Date(currentPayCycleEnd);
+            nextPayCycleStart.setDate(currentPayCycleEnd.getDate() + 1);
 
             var currentCycleRevenue = 0;
             var currentCycleMiles = 0;
@@ -1168,7 +1165,7 @@
 
             data.loads.forEach(load => {
                 var loadDate = new Date(load.date);
-                if (loadDate <= currentCycleEnd) {
+                if (loadDate <= currentPayCycleEnd) {
                     currentCycleRevenue += load.revenue || 0;
                     currentCycleMiles += load.miles || 0;
                 } else {
