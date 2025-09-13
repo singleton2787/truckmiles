@@ -442,7 +442,7 @@
                     </div>
                     <div class="gauge-info-item">
                         <p>Breakeven Target:</p>
-                        <strong id="breakevenTarget">$1,552</strong>
+                        <strong id="breakevenTarget">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
                         <p>Weekly Profit:</p>
@@ -571,6 +571,11 @@
                         <div class="form-group">
                             <label for="expenseNotes">Description/Notes</label>
                             <textarea id="expenseNotes" name="expenseNotes" rows="2" placeholder="Description of expense..."></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <input type="checkbox" id="includeLease" checked>
+                            <label for="includeLease" style="display: inline;">Include this week's lease payment?</label>
                         </div>
                         
                         <button type="submit" class="btn btn-success">Add Expense</button>
@@ -798,6 +803,18 @@
             updateHistoryDisplay();
         }
 
+        // Global chart variables
+        var weeklyGaugeChart = null;
+        var incentiveGaugeChart = null;
+        
+        // This runs once when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeWeeklyGauge();
+            initializeIncentiveGauge();
+            updateDisplay();
+        });
+
+
         function updateDisplay() {
             var data = loadData();
             
@@ -827,19 +844,16 @@
             updateIncentiveGauge();
         }
 
-        // Initialize charts (to be called once)
-        var weeklyGaugeChart = null;
-        var incentiveGaugeChart = null;
-
         function initializeWeeklyGauge() {
             const ctx = document.getElementById('weeklyGaugeCanvas').getContext('2d');
             weeklyGaugeChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
+                    labels: ['Loss', 'Profit'],
                     datasets: [{
-                        data: [0, 100],
-                        backgroundColor: ['#e74c3c', '#ffffff'],
-                        borderWidth: 0,
+                        data: [50, 50],
+                        backgroundColor: ['#e74c3c', '#27ae60'],
+                        borderWidth: 0
                     }]
                 },
                 options: {
@@ -849,26 +863,23 @@
                     circumference: 180,
                     cutout: '80%',
                     plugins: {
-                        tooltip: {
-                            enabled: false
-                        },
-                        legend: {
-                            display: false
-                        }
+                        tooltip: { enabled: false },
+                        legend: { display: false }
                     }
                 }
             });
         }
-
+        
         function initializeIncentiveGauge() {
             const ctx = document.getElementById('incentiveGaugeCanvas').getContext('2d');
             incentiveGaugeChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
+                    labels: ['0-3999', '4000-5999', '6000-7999', '8000+'],
                     datasets: [{
-                        data: [0, 4000, 2000, 2000],
-                        backgroundColor: ['#dcdcdc', '#e74c3c', '#f1c40f', '#27ae60'],
-                        borderWidth: 0,
+                        data: [3999, 2000, 2000, 2000],
+                        backgroundColor: ['#dcdcdc', '#f1c40f', '#27ae60', '#3498db'],
+                        borderWidth: 0
                     }]
                 },
                 options: {
@@ -878,98 +889,92 @@
                     circumference: 180,
                     cutout: '80%',
                     plugins: {
-                        tooltip: {
-                            enabled: false
-                        },
-                        legend: {
-                            display: false
-                        }
+                        tooltip: { enabled: false },
+                        legend: { display: false }
                     }
                 }
             });
         }
 
         function updateWeeklyGauge() {
-            if (!weeklyGaugeChart) initializeWeeklyGauge();
-
             var data = loadData();
-            const BREAKEVEN_REVENUE_TARGET = 1552;
+            const BREAKEVEN_TARGET_TOTAL = 1443;
+            const BREAKEVEN_TARGET_NO_LEASE = 1443 - 835;
+
+            var includeLease = document.getElementById('includeLease').checked;
+            var effectiveBreakevenTarget = includeLease ? BREAKEVEN_TARGET_TOTAL : BREAKEVEN_TARGET_NO_LEASE;
             
             var now = new Date();
             var weekStart = new Date(now);
             weekStart.setDate(now.getDate() - now.getDay()); 
             weekStart.setHours(0, 0, 0, 0);
             
-            var weeklyRevenue = 0;
-            
-            data.loads.forEach(load => {
+            var weeklyRevenue = data.loads.filter(load => {
                 var loadDate = new Date(load.date);
-                if (loadDate >= weekStart) {
-                    weeklyRevenue += load.revenue || 0;
-                }
-            });
+                return loadDate >= weekStart;
+            }).reduce((sum, load) => sum + (load.revenue || 0), 0);
 
-            var weeklyProfit = weeklyRevenue - BREAKEVEN_REVENUE_TARGET;
-
-            let progress = weeklyProfit / BREAKEVEN_REVENUE_TARGET;
-            let gaugeValue = 0;
-
-            if (progress < 0) {
-                gaugeValue = Math.min(100, Math.max(0, (weeklyRevenue / BREAKEVEN_REVENUE_TARGET) * 100));
-                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, '#ffffff'];
-                weeklyGaugeChart.data.datasets[0].data = [gaugeValue, 100 - gaugeValue];
-            } else {
-                gaugeValue = 50 + Math.min(50, (weeklyProfit / BREAKEVEN_REVENUE_TARGET) * 50);
-                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, `#27ae60`, '#ffffff'];
-                weeklyGaugeChart.data.datasets[0].data = [50, gaugeValue - 50, 100 - gaugeValue];
-            }
-
-            weeklyGaugeChart.update();
+            var weeklyProfit = weeklyRevenue - effectiveBreakevenTarget;
             
+            let progress = weeklyRevenue / effectiveBreakevenTarget;
+            let lossSlice = Math.min(100, Math.max(0, (1 - progress) * 50));
+            let profitSlice = 100 - lossSlice;
+            
+            weeklyGaugeChart.data.datasets[0].data = [lossSlice, profitSlice];
+            weeklyGaugeChart.data.datasets[0].backgroundColor = [
+                lossSlice > 50 ? '#e74c3c' : '#f1c40f', 
+                '#27ae60'
+            ];
+            weeklyGaugeChart.update();
+
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
-            document.getElementById('breakevenTarget').textContent = '$' + BREAKEVEN_REVENUE_TARGET.toFixed(2);
+            document.getElementById('breakevenTarget').textContent = '$' + effectiveBreakevenTarget.toFixed(2);
             document.getElementById('weeklyProfit').textContent = '$' + weeklyProfit.toFixed(2);
         }
 
         function updateIncentiveGauge() {
-            if (!incentiveGaugeChart) initializeIncentiveGauge();
-
             var data = loadData();
             var now = new Date();
             var fourWeeksAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 28);
-            var fourWeekMiles = 0;
-            
-            data.loads.forEach(load => {
+            var fourWeekMiles = data.loads.filter(load => {
                 var loadDate = new Date(load.date);
-                if (loadDate >= fourWeeksAgo) {
-                    fourWeekMiles += load.miles || 0;
-                }
-            });
+                return loadDate >= fourWeeksAgo;
+            }).reduce((sum, load) => sum + (load.miles || 0), 0);
 
-            let tierProgress = 0;
             let milesToNextTier = 0;
             let incentiveRate = 0;
+            let tier1Miles = 4000;
+            let tier2Miles = 6000;
+            let tier3Miles = 8000;
+            
+            let slice1 = 0, slice2 = 0, slice3 = 0, slice4 = 0;
 
-            if (fourWeekMiles >= 8000) {
+            if (fourWeekMiles >= tier3Miles) {
                 incentiveRate = 0.07;
                 milesToNextTier = 0;
-                tierProgress = 1;
-            } else if (fourWeekMiles >= 6000) {
+                slice1 = tier1Miles;
+                slice2 = tier2Miles - tier1Miles;
+                slice3 = tier3Miles - tier2Miles;
+                slice4 = fourWeekMiles - tier3Miles;
+            } else if (fourWeekMiles >= tier2Miles) {
                 incentiveRate = 0.06;
-                milesToNextTier = 8000 - fourWeekMiles;
-                tierProgress = 0.75 + (fourWeekMiles - 6000) / 2000 * 0.25;
-            } else if (fourWeekMiles >= 4000) {
+                milesToNextTier = tier3Miles - fourWeekMiles;
+                slice1 = tier1Miles;
+                slice2 = tier2Miles - tier1Miles;
+                slice3 = fourWeekMiles - tier2Miles;
+            } else if (fourWeekMiles >= tier1Miles) {
                 incentiveRate = 0.05;
-                milesToNextTier = 6000 - fourWeekMiles;
-                tierProgress = 0.5 + (fourWeekMiles - 4000) / 2000 * 0.25;
+                milesToNextTier = tier2Miles - fourWeekMiles;
+                slice1 = tier1Miles;
+                slice2 = fourWeekMiles - tier1Miles;
             } else {
                 incentiveRate = 0.00;
-                milesToNextTier = 4000 - fourWeekMiles;
-                tierProgress = fourWeekMiles / 4000 * 0.5;
+                milesToNextTier = tier1Miles - fourWeekMiles;
+                slice1 = fourWeekMiles;
             }
 
-            incentiveGaugeChart.data.datasets[0].data = [fourWeekMiles, milesToNextTier];
-            incentiveGaugeChart.data.datasets[0].backgroundColor = [`#dcdcdc`, `#e74c3c`, `#f1c40f`, `#27ae60`];
+            incentiveGaugeChart.data.datasets[0].data = [slice1, slice2, slice3, slice4, Math.max(0, tier3Miles - fourWeekMiles)];
+            incentiveGaugeChart.data.datasets[0].backgroundColor = [`#dcdcdc`, `#f1c40f`, `#27ae60`, `#3498db`, `#ffffff`];
             incentiveGaugeChart.update();
             
             document.getElementById('fourWeekMiles').textContent = fourWeekMiles.toLocaleString();
@@ -1112,7 +1117,6 @@
             }
         }
 
-        updateDisplay();
     </script>
 </body>
 </html>
