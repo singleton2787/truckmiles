@@ -386,6 +386,46 @@
             text-align: left;
         }
 
+        .pay-cycle-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .pay-cycle-card h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .pay-cycle-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .pay-cycle-stat {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .pay-cycle-stat p {
+            color: #7f8c8d;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .pay-cycle-stat strong {
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+
+
         @media (max-width: 768px) {
             .container {
                 margin: 5px;
@@ -526,6 +566,7 @@
             <div class="tabs">
                 <button class="tab active" onclick="showTab('load', this)">Add Load</button>
                 <button class="tab" onclick="showTab('expenses', this)">Add Expenses</button>
+                <button class="tab" onclick="showTab('pay-cycle', this)">Pay Cycle</button>
                 <button class="tab" onclick="showTab('rates', this)">Rates</button>
                 <button class="tab" onclick="showTab('history', this)">History</button>
                 <button class="tab" onclick="showTab('data', this)">Data</button>
@@ -625,6 +666,41 @@
                         <button type="submit" class="btn btn-success">Add Expense</button>
                         <button type="button" class="btn" onclick="clearExpenseForm()">Clear Form</button>
                     </form>
+                </div>
+            </div>
+
+            <div id="pay-cycle" class="tab-content">
+                <div class="section">
+                    <h2>Pay Cycle Preview</h2>
+                    <p>Pay cycle ends Tuesday at midnight. The next check will be for loads delivered from Wednesday through Tuesday.</p>
+                    <div class="pay-cycle-stats">
+                        <div class="pay-cycle-card">
+                            <h3>Current Pay Cycle (Next Check)</h3>
+                            <div class="pay-cycle-stats">
+                                <div class="pay-cycle-stat">
+                                    <p>Revenue:</p>
+                                    <strong id="currentCycleRevenue">$0.00</strong>
+                                </div>
+                                <div class="pay-cycle-stat">
+                                    <p>Miles:</p>
+                                    <strong id="currentCycleMiles">0</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pay-cycle-card">
+                            <h3>Next Pay Cycle (Following Check)</h3>
+                            <div class="pay-cycle-stats">
+                                <div class="pay-cycle-stat">
+                                    <p>Revenue:</p>
+                                    <strong id="nextCycleRevenue">$0.00</strong>
+                                </div>
+                                <div class="pay-cycle-stat">
+                                    <p>Miles:</p>
+                                    <strong id="nextCycleMiles">0</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -902,6 +978,7 @@
             updateHistoryDisplay();
             updateWeeklyGauge();
             updateIncentiveGauge();
+            updatePayCyclePreview();
         }
 
         function initializeWeeklyGauge() {
@@ -1067,6 +1144,43 @@
             document.getElementById('incentiveRate').textContent = '$' + incentiveRate.toFixed(2);
             document.getElementById('milesToNextTier').textContent = milesToNextTier.toLocaleString();
             document.getElementById('totalIncentivePay').textContent = '$' + totalIncentivePay.toFixed(2);
+        }
+
+        function updatePayCyclePreview() {
+            var data = loadData();
+            var now = new Date();
+            
+            var currentCycleEnd = new Date(now);
+            currentCycleEnd.setDate(now.getDate() + (2 - now.getDay())); 
+            currentCycleEnd.setHours(23, 59, 59, 999);
+            
+            if (now.getDay() === 3 && now.getHours() < 6) { // Special case for early Wednesday drops
+                currentCycleEnd.setDate(currentCycleEnd.getDate() - 7);
+            }
+
+            var nextCycleStart = new Date(currentCycleEnd);
+            nextCycleStart.setDate(currentCycleEnd.getDate() + 1);
+
+            var currentCycleRevenue = 0;
+            var currentCycleMiles = 0;
+            var nextCycleRevenue = 0;
+            var nextCycleMiles = 0;
+
+            data.loads.forEach(load => {
+                var loadDate = new Date(load.date);
+                if (loadDate <= currentCycleEnd) {
+                    currentCycleRevenue += load.revenue || 0;
+                    currentCycleMiles += load.miles || 0;
+                } else {
+                    nextCycleRevenue += load.revenue || 0;
+                    nextCycleMiles += load.miles || 0;
+                }
+            });
+
+            document.getElementById('currentCycleRevenue').textContent = '$' + currentCycleRevenue.toFixed(2);
+            document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+            document.getElementById('nextCycleRevenue').textContent = '$' + nextCycleRevenue.toFixed(2);
+            document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
         }
 
         function updateHistoryDisplay() {
