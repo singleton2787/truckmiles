@@ -81,18 +81,19 @@
             font-size: 0.9em;
         }
 
-        /* Weekly Gauge Styles */
+        /* NEW Weekly Gauge Styles */
         .weekly-gauge-container {
             padding: 20px;
             background: #f8f9fa;
         }
-
+        
         .gauge-card {
             background: white;
             padding: 25px;
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             text-align: center;
+            position: relative;
         }
 
         .gauge-card h2 {
@@ -101,104 +102,80 @@
             margin-bottom: 20px;
         }
 
-        .gauge-chart {
+        .gauge-chart-wrapper {
             position: relative;
-            width: 200px;
-            height: 100px;
+            width: 250px;
+            height: 125px;
             margin: 0 auto;
             overflow: hidden;
-            border-top-left-radius: 200px;
-            border-top-right-radius: 200px;
-            background: #e0e0e0;
-            margin-bottom: 20px;
         }
 
-        .gauge-slice-red,
-        .gauge-slice-yellow,
-        .gauge-slice-green {
+        .gauge-fill {
             position: absolute;
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
             top: 0;
             left: 0;
+            background: conic-gradient(
+                #e74c3c 0% 30%, 
+                #f1c40f 30% 60%, 
+                #27ae60 60% 100%
+            );
+            transform: rotate(-90deg);
+        }
+
+        .gauge-mask {
+            position: absolute;
             width: 100%;
             height: 100%;
-            border-radius: 200px 200px 0 0;
-            transform-origin: bottom center;
-        }
-        
-        .gauge-slice-red {
-            background: #e74c3c;
-            clip-path: polygon(0 100%, 50% 0, 100% 100%);
-            transform: rotate(-90deg);
+            top: 50%;
+            left: 0;
+            background-color: white;
             z-index: 1;
-        }
-
-        .gauge-slice-yellow {
-            background: #f1c40f;
-            clip-path: polygon(0 100%, 50% 0, 100% 100%);
-            transform: rotate(-30deg);
-            z-index: 2;
-        }
-
-        .gauge-slice-green {
-            background: #27ae60;
-            clip-path: polygon(0 100%, 50% 0, 100% 100%);
-            transform: rotate(30deg);
-            z-index: 3;
         }
 
         .gauge-needle {
             position: absolute;
-            bottom: 0;
+            bottom: 5px;
             left: 50%;
-            width: 4px;
-            height: 100px;
+            width: 6px;
+            height: 120px;
             background: #34495e;
             transform-origin: bottom center;
-            transition: transform 0.5s ease-in-out;
-            z-index: 10;
+            transition: transform 0.8s ease-in-out;
+            z-index: 2;
+            border-radius: 3px;
         }
-        
+
         .gauge-needle::before {
             content: '';
             position: absolute;
-            top: -5px;
-            left: -3px;
-            width: 10px;
-            height: 10px;
+            top: -10px;
+            left: -7px;
+            width: 20px;
+            height: 20px;
             background: #34495e;
             border-radius: 50%;
+            border: 2px solid white;
         }
 
-        .gauge-center {
+        .gauge-label {
             position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100px;
-            height: 50px;
-            background: white;
-            z-index: 5;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .gauge-center span {
-            font-size: 1.5em;
-            font-weight: bold;
+            bottom: 5px;
             color: #2c3e50;
+            font-weight: bold;
+            font-size: 0.9em;
+            z-index: 3;
         }
-
-        .gauge-center p {
-            font-size: 0.8em;
-            color: #7f8c8d;
-        }
+        .gauge-label.low { left: 0; }
+        .gauge-label.mid { left: 50%; transform: translateX(-50%); }
+        .gauge-label.high { right: 0; }
 
         .gauge-info {
             display: flex;
             justify-content: space-around;
-            margin-top: 20px;
+            margin-top: 30px;
         }
 
         .gauge-info-item {
@@ -518,24 +495,26 @@
         <div class="weekly-gauge-container">
             <div class="gauge-card">
                 <h2>Weekly Revenue Status</h2>
-                <div class="gauge-chart">
-                    <div class="gauge-slice-red"></div>
-                    <div class="gauge-slice-yellow"></div>
-                    <div class="gauge-slice-green"></div>
+                <div class="gauge-chart-wrapper">
+                    <div class="gauge-fill"></div>
+                    <div class="gauge-mask"></div>
                     <div class="gauge-needle" id="gaugeNeedle"></div>
-                    <div class="gauge-center">
-                        <span id="weeklyRevenue">$0.00</span>
-                        <p>Weekly Revenue</p>
-                    </div>
+                    <div class="gauge-label low">Break Even</div>
+                    <div class="gauge-label mid">$500 Profit</div>
+                    <div class="gauge-label high">$1000 Profit</div>
                 </div>
                 <div class="gauge-info">
                     <div class="gauge-info-item">
-                        <p>Fixed Costs:</p>
-                        <strong id="weeklyFixedCosts">$0.00</strong>
+                        <p>Weekly Revenue:</p>
+                        <strong id="weeklyRevenue">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
-                        <p>To Breakeven:</p>
-                        <strong id="remainingToBreakeven">$0.00</strong>
+                        <p>Total Costs:</p>
+                        <strong id="totalWeeklyCosts">$0.00</strong>
+                    </div>
+                    <div class="gauge-info-item">
+                        <p>Weekly Profit:</p>
+                        <strong id="weeklyProfit">$0.00</strong>
                     </div>
                 </div>
             </div>
@@ -920,26 +899,29 @@
             var weeklyVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
             var totalWeeklyCosts = weeklyFixedCosts + weeklyVariableCosts;
 
-            var breakEvenRevenue = totalWeeklyCosts;
-
-            var needleAngle;
             var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
+            
+            // Calculate needle rotation based on profit/loss
+            let needleAngle;
+            const MAX_PROFIT_FOR_GAUGE = 1000; // Value for the needle to point straight right
 
-            if (weeklyRevenue >= breakEvenRevenue) {
-                let maxProfit = weeklyFixedCosts * 1.5; 
-                let profitRatio = Math.min(weeklyProfit / maxProfit, 1);
-                needleAngle = 90 * profitRatio;
-                
+            if (weeklyProfit <= 0) {
+                // Not profitable: needle moves from center (0deg) to left (-90deg)
+                // We'll use the ratio of revenue to total costs
+                let progress = Math.min(weeklyRevenue / totalWeeklyCosts, 1);
+                needleAngle = -90 + (90 * progress);
             } else {
-                let lossRatio = Math.min(weeklyProfit / breakEvenRevenue, 1);
-                needleAngle = -90 + (90 * lossRatio);
+                // Profitable: needle moves from center (0deg) to right (90deg)
+                let progress = Math.min(weeklyProfit / MAX_PROFIT_FOR_GAUGE, 1);
+                needleAngle = progress * 90;
             }
             
             document.getElementById('gaugeNeedle').style.transform = `rotate(${needleAngle}deg)`;
             
+            // Update labels
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
-            document.getElementById('weeklyFixedCosts').textContent = '$' + weeklyFixedCosts.toFixed(2);
-            document.getElementById('remainingToBreakeven').textContent = '$' + Math.max(0, breakEvenRevenue - weeklyRevenue).toFixed(2);
+            document.getElementById('totalWeeklyCosts').textContent = '$' + totalWeeklyCosts.toFixed(2);
+            document.getElementById('weeklyProfit').textContent = '$' + weeklyProfit.toFixed(2);
         }
 
         function updateHistoryDisplay() {
