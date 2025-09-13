@@ -583,7 +583,7 @@
                             </div>
                             
                             <div class="form-group">
-                                <label for="date">Date</label>
+                                <label for="date">Load Drop Date</label>
                                 <input type="date" id="date" name="date" required>
                             </div>
                             
@@ -960,13 +960,23 @@
             var avgCPM = totalMiles > 0 ? overallTotalCosts / totalMiles : 0;
             var avgProfitPerMile = totalMiles > 0 ? overallNetProfit / totalMiles : 0;
             
-            document.getElementById('totalRevenue').textContent = '$' + totalRevenue.toFixed(2);
-            document.getElementById('totalExpenses').textContent = '$' + overallTotalCosts.toFixed(2);
-            document.getElementById('netProfit').textContent = '$' + overallNetProfit.toFixed(2);
-            document.getElementById('totalMiles').textContent = totalMiles.toLocaleString();
-            document.getElementById('totalLoads').textContent = totalLoads;
-            document.getElementById('avgCPM').textContent = '$' + avgCPM.toFixed(3);
-            document.getElementById('avgProfitPerMile').textContent = '$' + avgProfitPerMile.toFixed(3);
+            if (data.loads.length === 0 && data.expenses.length === 0) {
+                document.getElementById('totalRevenue').textContent = '$0.00';
+                document.getElementById('totalExpenses').textContent = '$0.00';
+                document.getElementById('netProfit').textContent = '$0.00';
+                document.getElementById('totalMiles').textContent = '0';
+                document.getElementById('totalLoads').textContent = '0';
+                document.getElementById('avgCPM').textContent = '$0.000';
+                document.getElementById('avgProfitPerMile').textContent = '$0.000';
+            } else {
+                document.getElementById('totalRevenue').textContent = '$' + totalRevenue.toFixed(2);
+                document.getElementById('totalExpenses').textContent = '$' + overallTotalCosts.toFixed(2);
+                document.getElementById('netProfit').textContent = '$' + overallNetProfit.toFixed(2);
+                document.getElementById('totalMiles').textContent = totalMiles.toLocaleString();
+                document.getElementById('totalLoads').textContent = totalLoads;
+                document.getElementById('avgCPM').textContent = '$' + avgCPM.toFixed(3);
+                document.getElementById('avgProfitPerMile').textContent = '$' + avgProfitPerMile.toFixed(3);
+            }
 
             var profitCard = document.getElementById('netProfit').parentElement;
             if (overallNetProfit >= 0) {
@@ -1151,14 +1161,12 @@
             var now = new Date();
             
             // Pay cycle runs from Wednesday to Tuesday
-            // Calculate the end date of the current pay cycle (this coming Tuesday at midnight)
             var currentPayCycleEnd = new Date(now);
             var dayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
             var daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
             currentPayCycleEnd.setDate(now.getDate() + daysUntilTuesday);
             currentPayCycleEnd.setHours(23, 59, 59, 999);
 
-            // Calculate the start date of the current pay cycle (the Wednesday before)
             var currentPayCycleStart = new Date(currentPayCycleEnd);
             currentPayCycleStart.setDate(currentPayCycleEnd.getDate() - 6);
             currentPayCycleStart.setHours(0, 0, 0, 0);
