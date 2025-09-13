@@ -12,7 +12,7 @@ A comprehensive web application for independent truck drivers and owner-operator
 ### 📊 Complete Expense Management  
 - **Fixed Cost Allocation**: Automatically allocates weekly fixed expenses (truck payment, insurance, permits) per mile
 - **Variable Expense Tracking**: Manual entry for fuel, maintenance, parking, supplies, etc.
-- **Smart Fuel Calculator**: Built-in MPG calculator for accurate fuel cost tracking
+- **Smart Fuel Calculator**: Built-in calculator using $0.99/gallon (great price!) plus MPG tracking
 - **ATBS Integration**: Pre-loaded with ATBS average expense data for quick reference
 
 ### 📈 Profitability Analysis
@@ -223,6 +223,36 @@ For questions or issues:
 
 Created for independent truck drivers working with SINMIC-Independent and using ATBS business planning services. 
 
+## 📝 Recent Updates
+
+### Version 1.1 (Latest)
+- **Load Number Field**: Added optional load/dispatch number tracking for better organization
+- **Enhanced Mobile Support**: Improved responsive design for phone usage
+- **JavaScript Optimization**: Rewrote code for better browser compatibility and performance
+- **Simplified Interface**: Streamlined expense tracking for easier daily use
+- **Bug Fixes**: Resolved syntax errors and improved data handling
+
+### Version 1.0
+- Initial release with basic load and expense tracking
+- Revenue calculations based on contract rates
+- Local data storage and export functionality
+
 ---
 
-**Start tracking your real trucking business profitability today!** 🚛💰
+## 🔄 Updating Documentation
+
+When making changes to the app, update the following sections in this README:
+
+1. **Features Section**: Add/remove features as they're implemented
+2. **Usage Instructions**: Update step-by-step guides for new functionality  
+3. **Technical Details**: Note any framework or compatibility changes
+4. **Recent Updates**: Add version notes with key changes
+5. **Screenshots**: Update if UI changes significantly
+
+For major feature additions, consider updating:
+- Installation instructions
+- Configuration options
+- Troubleshooting section
+- Performance considerations
+
+---
