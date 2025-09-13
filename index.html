@@ -81,6 +81,140 @@
             font-size: 0.9em;
         }
 
+        /* Weekly Gauge Styles */
+        .weekly-gauge-container {
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .gauge-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .gauge-card h2 {
+            font-size: 1.5em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .gauge-chart {
+            position: relative;
+            width: 200px;
+            height: 100px;
+            margin: 0 auto;
+            overflow: hidden;
+            border-top-left-radius: 200px;
+            border-top-right-radius: 200px;
+            background: #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .gauge-slice-red,
+        .gauge-slice-yellow,
+        .gauge-slice-green {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 200px 200px 0 0;
+            transform-origin: bottom center;
+        }
+        
+        .gauge-slice-red {
+            background: #e74c3c;
+            clip-path: polygon(0 100%, 50% 0, 100% 100%);
+            transform: rotate(-90deg);
+            z-index: 1;
+        }
+
+        .gauge-slice-yellow {
+            background: #f1c40f;
+            clip-path: polygon(0 100%, 50% 0, 100% 100%);
+            transform: rotate(-30deg);
+            z-index: 2;
+        }
+
+        .gauge-slice-green {
+            background: #27ae60;
+            clip-path: polygon(0 100%, 50% 0, 100% 100%);
+            transform: rotate(30deg);
+            z-index: 3;
+        }
+
+        .gauge-needle {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 4px;
+            height: 100px;
+            background: #34495e;
+            transform-origin: bottom center;
+            transition: transform 0.5s ease-in-out;
+            z-index: 10;
+        }
+        
+        .gauge-needle::before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            left: -3px;
+            width: 10px;
+            height: 10px;
+            background: #34495e;
+            border-radius: 50%;
+        }
+
+        .gauge-center {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 50px;
+            background: white;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .gauge-center span {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .gauge-center p {
+            font-size: 0.8em;
+            color: #7f8c8d;
+        }
+
+        .gauge-info {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+
+        .gauge-info-item {
+            text-align: center;
+        }
+
+        .gauge-info-item p {
+            font-size: 0.8em;
+            color: #7f8c8d;
+        }
+
+        .gauge-info-item strong {
+            font-size: 1.2em;
+            color: #2c3e50;
+        }
+        
         .main-content {
             padding: 20px;
         }
@@ -378,6 +512,32 @@
             <div class="stat-card">
                 <h3 id="avgProfitPerMile">$0.00</h3>
                 <p>Avg Profit/Mile</p>
+            </div>
+        </div>
+
+        <div class="weekly-gauge-container">
+            <div class="gauge-card">
+                <h2>Weekly Revenue Status</h2>
+                <div class="gauge-chart">
+                    <div class="gauge-slice-red"></div>
+                    <div class="gauge-slice-yellow"></div>
+                    <div class="gauge-slice-green"></div>
+                    <div class="gauge-needle" id="gaugeNeedle"></div>
+                    <div class="gauge-center">
+                        <span id="weeklyRevenue">$0.00</span>
+                        <p>Weekly Revenue</p>
+                    </div>
+                </div>
+                <div class="gauge-info">
+                    <div class="gauge-info-item">
+                        <p>Fixed Costs:</p>
+                        <strong id="weeklyFixedCosts">$0.00</strong>
+                    </div>
+                    <div class="gauge-info-item">
+                        <p>To Breakeven:</p>
+                        <strong id="remainingToBreakeven">$0.00</strong>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -731,6 +891,55 @@
             }
             
             updateHistoryDisplay();
+            updateWeeklyGauge(data);
+        }
+
+        function updateWeeklyGauge(data) {
+            const VARIABLE_COST_PER_MILE = 0.37;
+            const FIXED_COSTS_PER_DAY = 159;
+
+            var now = new Date();
+            var weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - now.getDay()); 
+            weekStart.setHours(0, 0, 0, 0);
+            
+            var weeklyRevenue = 0;
+            var weeklyMiles = 0;
+            
+            data.loads.forEach(load => {
+                var loadDate = new Date(load.date);
+                if (loadDate >= weekStart) {
+                    weeklyRevenue += load.revenue || 0;
+                    weeklyMiles += load.miles || 0;
+                }
+            });
+
+            var daysPassed = now.getDay() + 1;
+            var weeklyFixedCosts = FIXED_COSTS_PER_DAY * daysPassed;
+
+            var weeklyVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
+            var totalWeeklyCosts = weeklyFixedCosts + weeklyVariableCosts;
+
+            var breakEvenRevenue = totalWeeklyCosts;
+
+            var needleAngle;
+            var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
+
+            if (weeklyRevenue >= breakEvenRevenue) {
+                let maxProfit = weeklyFixedCosts * 1.5; 
+                let profitRatio = Math.min(weeklyProfit / maxProfit, 1);
+                needleAngle = 90 * profitRatio;
+                
+            } else {
+                let lossRatio = Math.min(weeklyProfit / breakEvenRevenue, 1);
+                needleAngle = -90 + (90 * lossRatio);
+            }
+            
+            document.getElementById('gaugeNeedle').style.transform = `rotate(${needleAngle}deg)`;
+            
+            document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
+            document.getElementById('weeklyFixedCosts').textContent = '$' + weeklyFixedCosts.toFixed(2);
+            document.getElementById('remainingToBreakeven').textContent = '$' + Math.max(0, breakEvenRevenue - weeklyRevenue).toFixed(2);
         }
 
         function updateHistoryDisplay() {
