@@ -660,7 +660,7 @@
                         
                         <div class="form-group">
                             <label for="expenseNotes">Description/Notes</label>
-                            <textarea id="expenseNotes" name="expenseNotes" rows="2" placeholder="Description of expense..."></textarea>
+                            <textarea id="expenseNotes" name="expenseNotes" rows="2" placeholder="Additional details..."></textarea>
                         </div>
                         
                         <button type="submit" class="btn btn-success">Add Expense</button>
@@ -1150,13 +1150,18 @@
             var data = loadData();
             var now = new Date();
             
-            // Pay cycle runs Wednesday to Tuesday
+            // Pay cycle runs from Wednesday to Tuesday
+            // Calculate the end date of the current pay cycle (this coming Tuesday at midnight)
             var currentPayCycleEnd = new Date(now);
-            currentPayCycleEnd.setDate(now.getDate() + (2 - now.getDay())); // Get to next Tuesday
-            currentPayCycleEnd.setHours(23, 59, 59, 999); // Set to midnight Tuesday
+            var dayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
+            var daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
+            currentPayCycleEnd.setDate(now.getDate() + daysUntilTuesday);
+            currentPayCycleEnd.setHours(23, 59, 59, 999);
 
-            var nextPayCycleStart = new Date(currentPayCycleEnd);
-            nextPayCycleStart.setDate(currentPayCycleEnd.getDate() + 1);
+            // Calculate the start date of the current pay cycle (the Wednesday before)
+            var currentPayCycleStart = new Date(currentPayCycleEnd);
+            currentPayCycleStart.setDate(currentPayCycleEnd.getDate() - 6);
+            currentPayCycleStart.setHours(0, 0, 0, 0);
 
             var currentCycleRevenue = 0;
             var currentCycleMiles = 0;
@@ -1165,10 +1170,10 @@
 
             data.loads.forEach(load => {
                 var loadDate = new Date(load.date);
-                if (loadDate <= currentPayCycleEnd) {
+                if (loadDate >= currentPayCycleStart && loadDate <= currentPayCycleEnd) {
                     currentCycleRevenue += load.revenue || 0;
                     currentCycleMiles += load.miles || 0;
-                } else {
+                } else if (loadDate > currentPayCycleEnd) {
                     nextCycleRevenue += load.revenue || 0;
                     nextCycleMiles += load.miles || 0;
                 }
