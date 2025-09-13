@@ -104,20 +104,34 @@
             color: #2c3e50;
             margin-bottom: 20px;
         }
+
+        .lease-toggle {
+            margin: -10px 0 20px;
+            text-align: center;
+        }
+
+        .lease-toggle input[type="checkbox"] {
+            margin-right: 5px;
+        }
         
         .gauge-info {
-            display: flex;
-            justify-content: space-around;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
             margin-top: 30px;
         }
 
         .gauge-info-item {
             text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            background: #f1f2f6;
         }
 
         .gauge-info-item p {
             font-size: 0.8em;
             color: #7f8c8d;
+            margin-bottom: 5px;
         }
 
         .gauge-info-item strong {
@@ -435,10 +449,18 @@
                 <div style="height: 150px;">
                     <canvas id="weeklyGaugeCanvas"></canvas>
                 </div>
+                <div class="lease-toggle">
+                    <input type="checkbox" id="includeLease" checked onchange="updateDisplay()">
+                    <label for="includeLease" style="display: inline;">Include this week's truck payment? ($835)</label>
+                </div>
                 <div class="gauge-info">
                     <div class="gauge-info-item">
                         <p>Weekly Revenue:</p>
                         <strong id="weeklyRevenue">$0.00</strong>
+                    </div>
+                    <div class="gauge-info-item">
+                        <p>Total Fixed Costs:</p>
+                        <strong id="totalFixedCosts">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
                         <p>Total Weekly Costs:</p>
@@ -468,6 +490,10 @@
                     <div class="gauge-info-item">
                         <p>Next Tier at:</p>
                         <strong id="milesToNextTier">4000</strong>
+                    </div>
+                    <div class="gauge-info-item">
+                        <p>Total Incentive Pay:</p>
+                        <strong id="totalIncentivePay">$0.00</strong>
                     </div>
                 </div>
             </div>
@@ -571,11 +597,6 @@
                         <div class="form-group">
                             <label for="expenseNotes">Description/Notes</label>
                             <textarea id="expenseNotes" name="expenseNotes" rows="2" placeholder="Description of expense..."></textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <input type="checkbox" id="includeLease" checked>
-                            <label for="includeLease" style="display: inline;">Include this week's truck payment? (\$835)</label>
                         </div>
                         
                         <button type="submit" class="btn btn-success">Add Expense</button>
@@ -900,7 +921,7 @@
             if (!weeklyGaugeChart) initializeWeeklyGauge();
 
             var data = loadData();
-            const FIXED_COSTS_WEEKLY = 277;
+            const BASE_FIXED_COSTS_WEEKLY = 277;
             const TRUCK_PAYMENT_WEEKLY = 835;
             const VARIABLE_COST_PER_MILE = 0.372;
             
@@ -921,30 +942,41 @@
                 return loadDate >= weekStart;
             }).reduce((sum, load) => sum + (load.miles || 0), 0);
 
-            var totalFixedCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
+            var totalFixedCosts = BASE_FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
             var totalVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
             var totalWeeklyCosts = totalFixedCosts + totalVariableCosts;
             var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
             
             let gaugeValue = 0;
-            const MAX_GAUGE_RANGE = 2000; // Define a max profit to scale the gauge
+            let totalFixedCostsAtBreakeven = 1433;
 
-            if (weeklyProfit <= 0) {
-                // If at a loss, scale from -90 to 0 degrees based on ratio to fixed costs
-                gaugeValue = Math.min(100, Math.max(0, (weeklyRevenue / totalWeeklyCosts) * 50));
-                weeklyGaugeChart.data.datasets[0].data = [gaugeValue, 100 - gaugeValue];
-                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, '#dcdcdc'];
-            } else {
-                // If in profit, scale from 0 to 90 degrees based on profit amount
-                let profitRatio = Math.min(weeklyProfit / MAX_GAUGE_RANGE, 1);
-                gaugeValue = 50 + (profitRatio * 50);
-                weeklyGaugeChart.data.datasets[0].data = [50, gaugeValue - 50, 100 - gaugeValue];
-                weeklyGaugeChart.data.datasets[0].backgroundColor = [`#e74c3c`, `#27ae60`, '#dcdcdc'];
+            if(includeLease) {
+                totalFixedCostsAtBreakeven = 2268;
             }
 
+            let breakevenPointRevenue = totalFixedCostsAtBreakeven;
+            let revenueToBreakevenRatio = weeklyRevenue / breakevenPointRevenue;
+
+            gaugeValue = Math.min(100, Math.max(0, revenueToBreakevenRatio * 100));
+
+            let colorSlice1 = gaugeValue > 50 ? '#f1c40f' : '#e74c3c';
+            let colorSlice2 = gaugeValue > 50 ? '#27ae60' : '#ffffff';
+            let data1 = Math.min(50, gaugeValue);
+            let data2 = Math.max(0, gaugeValue - 50);
+            let data3 = 100 - gaugeValue;
+
+            if (data2 > 0) {
+                weeklyGaugeChart.data.datasets[0].data = [data1, data2, data3];
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [colorSlice1, colorSlice2, '#ffffff'];
+            } else {
+                weeklyGaugeChart.data.datasets[0].data = [data1, data3];
+                weeklyGaugeChart.data.datasets[0].backgroundColor = [colorSlice1, '#ffffff'];
+            }
+            
             weeklyGaugeChart.update();
 
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
+            document.getElementById('totalFixedCosts').textContent = '$' + totalFixedCosts.toFixed(2);
             document.getElementById('totalWeeklyCosts').textContent = '$' + totalWeeklyCosts.toFixed(2);
             document.getElementById('weeklyProfit').textContent = '$' + weeklyProfit.toFixed(2);
         }
