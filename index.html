@@ -118,9 +118,8 @@
             top: 0;
             left: 0;
             background: conic-gradient(
-                #e74c3c 0% 30%, 
-                #f1c40f 30% 60%, 
-                #27ae60 60% 100%
+                #e74c3c 0% 50%, 
+                #27ae60 50% 100%
             );
             transform: rotate(-90deg);
         }
@@ -499,9 +498,9 @@
                     <div class="gauge-fill"></div>
                     <div class="gauge-mask"></div>
                     <div class="gauge-needle" id="gaugeNeedle"></div>
-                    <div class="gauge-label low">Break Even</div>
-                    <div class="gauge-label mid">$500 Profit</div>
-                    <div class="gauge-label high">$1000 Profit</div>
+                    <div class="gauge-label low">Loss</div>
+                    <div class="gauge-label mid">Breakeven</div>
+                    <div class="gauge-label high">Profit</div>
                 </div>
                 <div class="gauge-info">
                     <div class="gauge-info-item">
@@ -509,8 +508,8 @@
                         <strong id="weeklyRevenue">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
-                        <p>Total Costs:</p>
-                        <strong id="totalWeeklyCosts">$0.00</strong>
+                        <p>Breakeven Target:</p>
+                        <strong id="breakevenTarget">$1,552</strong>
                     </div>
                     <div class="gauge-info-item">
                         <p>Weekly Profit:</p>
@@ -874,45 +873,37 @@
         }
 
         function updateWeeklyGauge(data) {
-            const VARIABLE_COST_PER_MILE = 0.37;
-            const FIXED_COSTS_PER_DAY = 159;
-
+            // Breakeven point for business and personal expenses, based on your Profit Plan.
+            const BREAKEVEN_REVENUE_TARGET = 1552;
+            
             var now = new Date();
             var weekStart = new Date(now);
             weekStart.setDate(now.getDate() - now.getDay()); 
             weekStart.setHours(0, 0, 0, 0);
             
             var weeklyRevenue = 0;
-            var weeklyMiles = 0;
             
             data.loads.forEach(load => {
                 var loadDate = new Date(load.date);
                 if (loadDate >= weekStart) {
                     weeklyRevenue += load.revenue || 0;
-                    weeklyMiles += load.miles || 0;
                 }
             });
 
-            var daysPassed = now.getDay() + 1;
-            var weeklyFixedCosts = FIXED_COSTS_PER_DAY * daysPassed;
-
-            var weeklyVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
-            var totalWeeklyCosts = weeklyFixedCosts + weeklyVariableCosts;
-
-            var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
+            var weeklyProfit = weeklyRevenue - BREAKEVEN_REVENUE_TARGET;
             
-            // Calculate needle rotation based on profit/loss
+            // Calculate needle rotation based on progress towards breakeven
             let needleAngle;
-            const MAX_PROFIT_FOR_GAUGE = 1000; // Value for the needle to point straight right
+            // The max value for the gauge is twice the breakeven target to give you a good visual range.
+            const MAX_GAUGE_VALUE = BREAKEVEN_REVENUE_TARGET * 2; 
 
-            if (weeklyProfit <= 0) {
-                // Not profitable: needle moves from center (0deg) to left (-90deg)
-                // We'll use the ratio of revenue to total costs
-                let progress = Math.min(weeklyRevenue / totalWeeklyCosts, 1);
+            if (weeklyRevenue < BREAKEVEN_REVENUE_TARGET) {
+                // Below breakeven: needle moves from center (0deg) to left (-90deg)
+                let progress = Math.min(weeklyRevenue / BREAKEVEN_REVENUE_TARGET, 1);
                 needleAngle = -90 + (90 * progress);
             } else {
-                // Profitable: needle moves from center (0deg) to right (90deg)
-                let progress = Math.min(weeklyProfit / MAX_PROFIT_FOR_GAUGE, 1);
+                // Above breakeven: needle moves from center (0deg) to right (90deg)
+                let progress = Math.min((weeklyRevenue - BREAKEVEN_REVENUE_TARGET) / BREAKEVEN_REVENUE_TARGET, 1);
                 needleAngle = progress * 90;
             }
             
@@ -920,7 +911,7 @@
             
             // Update labels
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
-            document.getElementById('totalWeeklyCosts').textContent = '$' + totalWeeklyCosts.toFixed(2);
+            document.getElementById('breakevenTarget').textContent = '$' + BREAKEVEN_REVENUE_TARGET.toFixed(2);
             document.getElementById('weeklyProfit').textContent = '$' + weeklyProfit.toFixed(2);
         }
 
