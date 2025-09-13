@@ -12,7 +12,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 10px;
@@ -202,32 +202,18 @@
             background: linear-gradient(135deg, #27ae60, #229954);
         }
 
-        .rate-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            font-size: 0.9em;
-        }
-
-        .rate-table th, .rate-table td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .rate-table th {
-            background: #34495e;
+        .pay-summary {
+            background: linear-gradient(135deg, #27ae60, #229954);
             color: white;
-            font-weight: 600;
-            font-size: 0.85em;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: center;
         }
 
-        .rate-table tr:hover {
-            background: #f8f9fa;
+        .pay-summary h3 {
+            font-size: 1.2em;
+            margin-bottom: 10px;
         }
 
         .history-item {
@@ -285,61 +271,42 @@
             background: #c0392b;
         }
 
-        .pay-summary {
-            background: linear-gradient(135deg, #27ae60, #229954);
+        .order-highlight {
+            background: #3498db;
             color: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-            text-align: center;
-        }
-
-        .pay-summary h3 {
-            font-size: 1.2em;
-            margin-bottom: 10px;
-        }
-
-        .pay-breakdown {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            gap: 15px;
-            text-align: center;
-        }
-
-        .expense-categories {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-        }
-
-        .expense-category {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #ddd;
-        }
-
-        .expense-category h3 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.1em;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-        }
-
-        .preset-btn {
-            background: #95a5a6;
-            color: white;
-            padding: 8px 12px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            display: inline-block;
             margin-left: 10px;
         }
 
-        .preset-btn:hover {
-            background: #7f8c8d;
+        .rate-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-size: 0.9em;
+        }
+
+        .rate-table th, .rate-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .rate-table th {
+            background: #34495e;
+            color: white;
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+
+        .rate-table tr:hover {
+            background: #f8f9fa;
         }
 
         @media (max-width: 768px) {
@@ -362,14 +329,6 @@
                 padding: 15px;
             }
             
-            .stat-card {
-                padding: 15px;
-            }
-            
-            .stat-card h3 {
-                font-size: 1.2em;
-            }
-            
             .main-content {
                 padding: 15px;
             }
@@ -385,71 +344,13 @@
             .form-grid {
                 grid-template-columns: 1fr;
             }
-            
-            .rate-table {
-                font-size: 0.8em;
-            }
-            
-            .rate-table th, .rate-table td {
-                padding: 8px;
-            }
-            
-            .expense-categories {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .export-import {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-        }
-
-        .file-input {
-            margin-top: 10px;
-        }
-
-        .toggle-section {
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .toggle-section::after {
-            content: '▼';
-            transition: transform 0.3s ease;
-        }
-
-        .toggle-section.collapsed::after {
-            transform: rotate(-90deg);
-        }
-
-        .collapsible-content {
-            max-height: 1000px;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-        }
-
-        .collapsible-content.collapsed {
-            max-height: 0;
-        }
-
-        .order-highlight {
-            background: #3498db;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: bold;
-            display: inline-block;
-            margin-right: 10px;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚛 Trucking Business Tracker</h1>
+            <h1>Trucking Business Tracker</h1>
             <p>Track loads, miles, revenue, expenses, and calculate real profit</p>
         </div>
 
@@ -482,21 +383,21 @@
 
         <div class="main-content">
             <div class="tabs">
-                <button class="tab active" onclick="showTab('load')">📝 Add Load</button>
-                <button class="tab" onclick="showTab('expenses')">💰 Add Expenses</button>
-                <button class="tab" onclick="showTab('rates')">📊 Rates</button>
-                <button class="tab" onclick="showTab('history')">📈 History</button>
-                <button class="tab" onclick="showTab('data')">💾 Data</button>
+                <button class="tab active" onclick="showTab('load')">Add Load</button>
+                <button class="tab" onclick="showTab('expenses')">Add Expenses</button>
+                <button class="tab" onclick="showTab('rates')">Rates</button>
+                <button class="tab" onclick="showTab('history')">History</button>
+                <button class="tab" onclick="showTab('data')">Data</button>
             </div>
 
             <div id="load" class="tab-content active">
                 <div class="section">
-                    <h2>📝 Add New Load</h2>
+                    <h2>Add New Load</h2>
                     <form id="loadForm">
                         <div class="form-grid">
                             <div class="form-group">
-                                <label for="orderNumber">Order Number</label>
-                                <input type="text" id="orderNumber" name="orderNumber" placeholder="Order/Dispatch #">
+                                <label for="loadNumber">Load Number</label>
+                                <input type="text" id="loadNumber" name="loadNumber" placeholder="Load/Dispatch #">
                             </div>
                             
                             <div class="form-group">
@@ -538,7 +439,7 @@
 
             <div id="expenses" class="tab-content">
                 <div class="section">
-                    <h2>💰 Add Business Expenses</h2>
+                    <h2>Add Business Expenses</h2>
                     <form id="expenseForm">
                         <div class="form-grid">
                             <div class="form-group">
@@ -550,38 +451,29 @@
                                 <label for="expenseCategory">Category</label>
                                 <select id="expenseCategory" name="expenseCategory" required>
                                     <option value="">Select Category</option>
-                                    <optgroup label="Variable Expenses (per mile)">
-                                        <option value="fuel-tractor">Fuel - Tractor</option>
-                                        <option value="fuel-tax">Fuel Tax</option>
-                                        <option value="maintenance">Maintenance & Repairs</option>
-                                        <option value="parking-tolls">Parking, Scales & Tolls</option>
-                                        <option value="supplies">Supplies</option>
-                                        <option value="travel-lodging">Travel & Lodging</option>
-                                    </optgroup>
-                                    <optgroup label="Fixed Expenses">
-                                        <option value="truck-payment">Truck Payment</option>
-                                        <option value="insurance-physical">Insurance - Physical Damage</option>
-                                        <option value="insurance-bobtail">Insurance - Bobtail</option>
-                                        <option value="insurance-workcomp">Insurance - Work Comp</option>
-                                        <option value="phone-internet">Phone & Internet</option>
-                                        <option value="communication">Other Communication Services</option>
-                                        <option value="licensing">Licensing & Permits</option>
-                                        <option value="fhut">FHUT</option>
-                                        <option value="professional">Professional Services</option>
-                                        <option value="other">Other</option>
-                                    </optgroup>
+                                    <option value="fuel-tractor">Fuel - Tractor</option>
+                                    <option value="fuel-tax">Fuel Tax</option>
+                                    <option value="maintenance">Maintenance & Repairs</option>
+                                    <option value="parking-tolls">Parking, Scales & Tolls</option>
+                                    <option value="supplies">Supplies</option>
+                                    <option value="travel-lodging">Travel & Lodging</option>
+                                    <option value="truck-payment">Truck Payment</option>
+                                    <option value="insurance-physical">Insurance - Physical Damage</option>
+                                    <option value="insurance-bobtail">Insurance - Bobtail</option>
+                                    <option value="insurance-workcomp">Insurance - Work Comp</option>
+                                    <option value="phone-internet">Phone & Internet</option>
+                                    <option value="other">Other</option>
                                 </select>
                             </div>
                             
                             <div class="form-group">
                                 <label for="expenseAmount">Amount ($)</label>
                                 <input type="number" id="expenseAmount" name="expenseAmount" min="0" step="0.01" required placeholder="0.00">
-                                <button type="button" class="preset-btn" onclick="usePresetExpense()">Use ATBS Average</button>
                             </div>
                             
                             <div class="form-group">
-                                <label for="expenseMiles">Miles (for variable expenses)</label>
-                                <input type="number" id="expenseMiles" name="expenseMiles" min="0" placeholder="Leave blank for fixed expenses">
+                                <label for="expenseMiles">Miles (if applicable)</label>
+                                <input type="number" id="expenseMiles" name="expenseMiles" min="0" placeholder="For per-mile expenses">
                             </div>
                         </div>
                         
@@ -594,45 +486,11 @@
                         <button type="button" class="btn" onclick="clearExpenseForm()">Clear Form</button>
                     </form>
                 </div>
-
-                <div class="section">
-                    <h2 class="toggle-section" onclick="toggleSection('expenseBreakdown')">📊 ATBS Average Weekly Expenses</h2>
-                    <div id="expenseBreakdown" class="collapsible-content">
-                        <div class="expense-categories">
-                            <div class="expense-category">
-                                <h3>Variable Expenses (37.2¢/mile)</h3>
-                                <table class="rate-table">
-                                    <tr><td>Fuel - Tractor</td><td>14.1¢/mile</td><td>$354/wk</td></tr>
-                                    <tr><td>Fuel Tax</td><td>0.6¢/mile</td><td>$15/wk</td></tr>
-                                    <tr><td>Maintenance & Repairs</td><td>13.0¢/mile</td><td>$325/wk</td></tr>
-                                    <tr><td>Parking, Scales & Tolls</td><td>8.0¢/mile</td><td>$200/wk</td></tr>
-                                    <tr><td>Supplies</td><td>0.8¢/mile</td><td>$20/wk</td></tr>
-                                    <tr><td>Travel & Lodging</td><td>0.7¢/mile</td><td>$17/wk</td></tr>
-                                </table>
-                            </div>
-                            
-                            <div class="expense-category">
-                                <h3>Fixed Expenses ($1,112/week)</h3>
-                                <table class="rate-table">
-                                    <tr><td>Truck Payment</td><td>$835/wk</td></tr>
-                                    <tr><td>Insurance - Physical Damage</td><td>$150/wk</td></tr>
-                                    <tr><td>Insurance - Bobtail</td><td>$7/wk</td></tr>
-                                    <tr><td>Insurance - Work Comp</td><td>$24/wk</td></tr>
-                                    <tr><td>Phone & Internet</td><td>$28/wk</td></tr>
-                                    <tr><td>Other Communication</td><td>$5/wk</td></tr>
-                                    <tr><td>Licensing & Permits</td><td>$31/wk</td></tr>
-                                    <tr><td>FHUT</td><td>$11/wk</td></tr>
-                                    <tr><td>Professional Services</td><td>$22/wk</td></tr>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <div id="rates" class="tab-content">
                 <div class="section">
-                    <h2>💰 Mileage Compensation Rates</h2>
+                    <h2>Mileage Compensation Rates</h2>
                     <table class="rate-table">
                         <thead>
                             <tr>
@@ -654,15 +512,12 @@
                             <tr><td>1,801 or more</td><td>$1.12</td></tr>
                         </tbody>
                     </table>
-                    <p style="margin-top: 15px; color: #7f8c8d; font-size: 0.9em;">
-                        <strong>Note:</strong> Your actual rates are much better than ATBS's assumed $1.25/mile average!
-                    </p>
                 </div>
             </div>
 
             <div id="history" class="tab-content">
                 <div class="section">
-                    <h2>📈 Load & Expense History</h2>
+                    <h2>Load & Expense History</h2>
                     <div style="margin-bottom: 20px;">
                         <button class="btn" onclick="showHistoryType('loads')">Loads</button>
                         <button class="btn" onclick="showHistoryType('expenses')">Expenses</button>
@@ -674,10 +529,10 @@
 
             <div id="data" class="tab-content">
                 <div class="section">
-                    <h2>💾 Data Management</h2>
+                    <h2>Data Management</h2>
                     <button type="button" class="btn" onclick="exportData()">Export Data</button>
                     <button type="button" class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
-                    <div class="file-input">
+                    <div style="margin-top: 10px;">
                         <input type="file" id="importFile" accept=".json" onchange="importData(event)" style="display: none;">
                         <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import Data</button>
                     </div>
@@ -687,7 +542,6 @@
     </div>
 
     <script>
-        // Rate calculation function based on the compensation table
         function calculatePay(miles) {
             if (miles <= 20) return miles * 2.85;
             if (miles <= 75) return miles * 2.00;
@@ -702,101 +556,68 @@
             return miles * 1.12;
         }
 
-        // ATBS preset expenses (weekly amounts)
-        const expensePresets = {
-            'fuel-tractor': 354,
-            'fuel-tax': 15,
-            'maintenance': 325,
-            'parking-tolls': 200,
-            'supplies': 20,
-            'travel-lodging': 17,
-            'truck-payment': 835,
-            'insurance-physical': 150,
-            'insurance-bobtail': 7,
-            'insurance-workcomp': 24,
-            'phone-internet': 28,
-            'communication': 5,
-            'licensing': 31,
-            'fhut': 11,
-            'professional': 22
-        };
+        var currentHistoryFilter = 'all';
 
-        let currentHistoryFilter = 'all';
-
-        // Set default dates to today
         document.getElementById('date').valueAsDate = new Date();
         document.getElementById('expenseDate').valueAsDate = new Date();
 
-        // Update calculated pay as miles are entered
         document.getElementById('miles').addEventListener('input', function() {
-            const miles = parseInt(this.value) || 0;
-            const pay = calculatePay(miles);
-            const rate = miles > 0 ? pay / miles : 0;
+            var miles = parseInt(this.value) || 0;
+            var pay = calculatePay(miles);
+            var rate = miles > 0 ? pay / miles : 0;
             document.getElementById('calculatedPay').textContent = pay.toFixed(2);
             document.getElementById('ratePerMile').textContent = rate.toFixed(3);
         });
 
-        // Tab functionality
         function showTab(tabName) {
-            // Hide all tab contents
-            const contents = document.querySelectorAll('.tab-content');
-            contents.forEach(content => content.classList.remove('active'));
+            var contents = document.querySelectorAll('.tab-content');
+            for (var i = 0; i < contents.length; i++) {
+                contents[i].classList.remove('active');
+            }
             
-            // Remove active from all tabs
-            const tabs = document.querySelectorAll('.tab');
-            tabs.forEach(tab => tab.classList.remove('active'));
+            var tabs = document.querySelectorAll('.tab');
+            for (var i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+            }
             
-            // Show selected tab
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
         }
 
-        // Toggle sections
-        function toggleSection(sectionId) {
-            const element = document.getElementById(sectionId);
-            const toggleBtn = element.previousElementSibling;
-            
-            element.classList.toggle('collapsed');
-            toggleBtn.classList.toggle('collapsed');
-        }
-
-        // Load data from localStorage
         function loadData() {
-            const loadsData = localStorage.getItem('loads');
-            const expensesData = localStorage.getItem('expenses');
+            var loadsData = localStorage.getItem('loads');
+            var expensesData = localStorage.getItem('expenses');
             return {
                 loads: loadsData ? JSON.parse(loadsData) : [],
                 expenses: expensesData ? JSON.parse(expensesData) : []
             };
         }
 
-        // Save data to localStorage
         function saveData(loads, expenses) {
             localStorage.setItem('loads', JSON.stringify(loads));
             localStorage.setItem('expenses', JSON.stringify(expenses));
         }
 
-        // Add new load
         document.getElementById('loadForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const formData = new FormData(e.target);
-            const miles = parseInt(formData.get('miles'));
-            const pay = calculatePay(miles);
+            var formData = new FormData(e.target);
+            var miles = parseInt(formData.get('miles')) || 0;
+            var pay = calculatePay(miles);
             
-            const load = {
+            var load = {
                 id: Date.now(),
                 type: 'load',
-                loadNumber: formData.get('loadNumber'),
-                date: formData.get('date'),
+                loadNumber: formData.get('loadNumber') || '',
+                date: formData.get('date') || '',
                 miles: miles,
-                origin: formData.get('origin'),
-                destination: formData.get('destination'),
-                notes: formData.get('notes'),
+                origin: formData.get('origin') || '',
+                destination: formData.get('destination') || '',
+                notes: formData.get('notes') || '',
                 revenue: pay
             };
             
-            const data = loadData();
+            var data = loadData();
             data.loads.unshift(load);
             saveData(data.loads, data.expenses);
             
@@ -805,23 +626,22 @@
             alert('Load added successfully!');
         });
 
-        // Add new expense
         document.getElementById('expenseForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const formData = new FormData(e.target);
+            var formData = new FormData(e.target);
             
-            const expense = {
+            var expense = {
                 id: Date.now(),
                 type: 'expense',
-                date: formData.get('expenseDate'),
-                category: formData.get('expenseCategory'),
-                amount: parseFloat(formData.get('expenseAmount')),
+                date: formData.get('expenseDate') || '',
+                category: formData.get('expenseCategory') || '',
+                amount: parseFloat(formData.get('expenseAmount')) || 0,
                 miles: formData.get('expenseMiles') ? parseInt(formData.get('expenseMiles')) : null,
-                notes: formData.get('expenseNotes')
+                notes: formData.get('expenseNotes') || ''
             };
             
-            const data = loadData();
+            var data = loadData();
             data.expenses.unshift(expense);
             saveData(data.loads, data.expenses);
             
@@ -830,15 +650,6 @@
             alert('Expense added successfully!');
         });
 
-        // Use preset expense amounts
-        function usePresetExpense() {
-            const category = document.getElementById('expenseCategory').value;
-            if (category && expensePresets[category]) {
-                document.getElementById('expenseAmount').value = expensePresets[category];
-            }
-        }
-
-        // Clear forms
         function clearForm() {
             document.getElementById('loadForm').reset();
             document.getElementById('date').valueAsDate = new Date();
@@ -851,48 +662,55 @@
             document.getElementById('expenseDate').valueAsDate = new Date();
         }
 
-        // Delete items
         function deleteItem(id, type) {
-            if (confirm(`Are you sure you want to delete this ${type}?`)) {
-                const data = loadData();
+            if (confirm('Are you sure you want to delete this ' + type + '?')) {
+                var data = loadData();
                 if (type === 'load') {
-                    data.loads = data.loads.filter(item => item.id !== id);
+                    data.loads = data.loads.filter(function(item) { return item.id !== id; });
                 } else {
-                    data.expenses = data.expenses.filter(item => item.id !== id);
+                    data.expenses = data.expenses.filter(function(item) { return item.id !== id; });
                 }
                 saveData(data.loads, data.expenses);
                 updateDisplay();
             }
         }
 
-        // Show history type
         function showHistoryType(type) {
             currentHistoryFilter = type;
             updateHistoryDisplay();
         }
 
-        // Update display
         function updateDisplay() {
-            const data = loadData();
+            var data = loadData();
             
-            // Calculate totals
-            const totalRevenue = data.loads.reduce((sum, load) => sum + load.revenue, 0);
-            const totalExpenses = data.expenses.reduce((sum, expense) => sum + expense.amount, 0);
-            const netProfit = totalRevenue - totalExpenses;
-            const totalMiles = data.loads.reduce((sum, load) => sum + load.miles, 0);
-            const totalLoads = data.loads.length;
-            const avgProfitPerMile = totalMiles > 0 ? netProfit / totalMiles : 0;
+            var totalRevenue = 0;
+            for (var i = 0; i < data.loads.length; i++) {
+                totalRevenue += data.loads[i].revenue || 0;
+            }
             
-            // Update stats
-            document.getElementById('totalRevenue').textContent = ' + totalRevenue.toFixed(2);
-            document.getElementById('totalExpenses').textContent = ' + totalExpenses.toFixed(2);
-            document.getElementById('netProfit').textContent = ' + netProfit.toFixed(2);
+            var totalExpenses = 0;
+            for (var i = 0; i < data.expenses.length; i++) {
+                totalExpenses += data.expenses[i].amount || 0;
+            }
+            
+            var netProfit = totalRevenue - totalExpenses;
+            
+            var totalMiles = 0;
+            for (var i = 0; i < data.loads.length; i++) {
+                totalMiles += data.loads[i].miles || 0;
+            }
+            
+            var totalLoads = data.loads.length;
+            var avgProfitPerMile = totalMiles > 0 ? netProfit / totalMiles : 0;
+            
+            document.getElementById('totalRevenue').textContent = '$' + totalRevenue.toFixed(2);
+            document.getElementById('totalExpenses').textContent = '$' + totalExpenses.toFixed(2);
+            document.getElementById('netProfit').textContent = '$' + netProfit.toFixed(2);
             document.getElementById('totalMiles').textContent = totalMiles.toLocaleString();
             document.getElementById('totalLoads').textContent = totalLoads;
-            document.getElementById('avgProfitPerMile').textContent = ' + avgProfitPerMile.toFixed(3);
+            document.getElementById('avgProfitPerMile').textContent = '$' + avgProfitPerMile.toFixed(3);
             
-            // Update profit card color
-            const profitCard = document.getElementById('netProfit').parentElement;
+            var profitCard = document.getElementById('netProfit').parentElement;
             if (netProfit >= 0) {
                 profitCard.className = 'stat-card profit';
             } else {
@@ -903,10 +721,10 @@
         }
 
         function updateHistoryDisplay() {
-            const data = loadData();
-            const historyContainer = document.getElementById('historyContainer');
+            var data = loadData();
+            var historyContainer = document.getElementById('historyContainer');
             
-            let items = [];
+            var items = [];
             
             if (currentHistoryFilter === 'loads' || currentHistoryFilter === 'all') {
                 items = items.concat(data.loads);
@@ -915,102 +733,100 @@
                 items = items.concat(data.expenses);
             }
             
-            // Sort by date (newest first)
-            items.sort((a, b) => new Date(b.date) - new Date(a.date));
+            items.sort(function(a, b) {
+                return new Date(b.date) - new Date(a.date);
+            });
             
             if (items.length === 0) {
                 historyContainer.innerHTML = '<p>No records found. Add some loads and expenses!</p>';
                 return;
             }
             
-            historyContainer.innerHTML = items.map(item => {
+            var htmlContent = '';
+            
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+                
                 if (item.type === 'load') {
-                    return `
-                        <div class="history-item">
-                            <button class="delete-btn" onclick="deleteItem(${item.id}, 'load')">Delete</button>
-                            <h3>
-                                🚛 Load - ${new Date(item.date).toLocaleDateString()}
-                                ${item.loadNumber ? `<span class="order-highlight">#${item.loadNumber}</span>` : ''}
-                            </h3>
-                            <div class="details">
-                                <div class="detail-item">
-                                    <strong>${item.miles}</strong>
-                                    <span>Miles</span>
-                                </div>
-                                <div class="detail-item">
-                                    <strong>${item.revenue.toFixed(2)}</strong>
-                                    <span>Revenue</span>
-                                </div>
-                                <div class="detail-item">
-                                    <strong>${(item.revenue / item.miles).toFixed(3)}</strong>
-                                    <span>Per Mile</span>
-                                </div>
-                            </div>
-                            ${item.origin || item.destination ? `
-                                <p><strong>Route:</strong> ${item.origin || 'N/A'} → ${item.destination || 'N/A'}</p>
-                            ` : ''}
-                            ${item.notes ? `<p><strong>Notes:</strong> ${item.notes}</p>` : ''}
-                        </div>
-                    `;
+                    var loadNumber = item.loadNumber || '';
+                    var origin = item.origin || 'N/A';
+                    var destination = item.destination || 'N/A';
+                    var notes = item.notes || '';
+                    var miles = item.miles || 0;
+                    var revenue = item.revenue || 0;
+                    var perMile = miles > 0 ? (revenue / miles) : 0;
+                    
+                    htmlContent += '<div class="history-item">';
+                    htmlContent += '<button class="delete-btn" onclick="deleteItem(' + item.id + ', \'load\')">Delete</button>';
+                    htmlContent += '<h3>Load - ' + new Date(item.date).toLocaleDateString();
+                    if (loadNumber) {
+                        htmlContent += '<span class="order-highlight">#' + loadNumber + '</span>';
+                    }
+                    htmlContent += '</h3>';
+                    htmlContent += '<div class="details">';
+                    htmlContent += '<div class="detail-item"><strong>' + miles + '</strong><span>Miles</span></div>';
+                    htmlContent += '<div class="detail-item"><strong>$' + revenue.toFixed(2) + '</strong><span>Revenue</span></div>';
+                    htmlContent += '<div class="detail-item"><strong>$' + perMile.toFixed(3) + '</strong><span>Per Mile</span></div>';
+                    htmlContent += '</div>';
+                    if (origin !== 'N/A' || destination !== 'N/A') {
+                        htmlContent += '<p><strong>Route:</strong> ' + origin + ' to ' + destination + '</p>';
+                    }
+                    if (notes) {
+                        htmlContent += '<p><strong>Notes:</strong> ' + notes + '</p>';
+                    }
+                    htmlContent += '</div>';
                 } else {
-                    const categoryName = document.querySelector(`option[value="${item.category}"]`)?.textContent || item.category;
-                    return `
-                        <div class="history-item" style="border-left-color: #e74c3c;">
-                            <button class="delete-btn" onclick="deleteItem(${item.id}, 'expense')">Delete</button>
-                            <h3>💰 Expense - ${new Date(item.date).toLocaleDateString()}</h3>
-                            <div class="details">
-                                <div class="detail-item">
-                                    <strong>${categoryName}</strong>
-                                    <span>Category</span>
-                                </div>
-                                <div class="detail-item">
-                                    <strong>${item.amount.toFixed(2)}</strong>
-                                    <span>Amount</span>
-                                </div>
-                                ${item.miles ? `
-                                    <div class="detail-item">
-                                        <strong>${item.miles}</strong>
-                                        <span>Miles</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <strong>${(item.amount / item.miles).toFixed(3)}</strong>
-                                        <span>Per Mile</span>
-                                    </div>
-                                ` : ''}
-                            </div>
-                            ${item.notes ? `<p><strong>Notes:</strong> ${item.notes}</p>` : ''}
-                        </div>
-                    `;
+                    var categoryName = item.category || '';
+                    var notes = item.notes || '';
+                    var amount = item.amount || 0;
+                    var miles = item.miles || 0;
+                    
+                    htmlContent += '<div class="history-item" style="border-left-color: #e74c3c;">';
+                    htmlContent += '<button class="delete-btn" onclick="deleteItem(' + item.id + ', \'expense\')">Delete</button>';
+                    htmlContent += '<h3>Expense - ' + new Date(item.date).toLocaleDateString() + '</h3>';
+                    htmlContent += '<div class="details">';
+                    htmlContent += '<div class="detail-item"><strong>' + categoryName + '</strong><span>Category</span></div>';
+                    htmlContent += '<div class="detail-item"><strong>$' + amount.toFixed(2) + '</strong><span>Amount</span></div>';
+                    if (miles > 0) {
+                        htmlContent += '<div class="detail-item"><strong>' + miles + '</strong><span>Miles</span></div>';
+                        htmlContent += '<div class="detail-item"><strong>$' + (amount / miles).toFixed(3) + '</strong><span>Per Mile</span></div>';
+                    }
+                    htmlContent += '</div>';
+                    if (notes) {
+                        htmlContent += '<p><strong>Notes:</strong> ' + notes + '</p>';
+                    }
+                    htmlContent += '</div>';
                 }
-            }).join('');
+            }
+            
+            historyContainer.innerHTML = htmlContent;
         }
 
-        // Export data
         function exportData() {
-            const data = loadData();
-            const exportData = {
+            var data = loadData();
+            var exportData = {
                 loads: data.loads,
                 expenses: data.expenses,
                 exportDate: new Date().toISOString()
             };
-            const dataStr = JSON.stringify(exportData, null, 2);
-            const dataBlob = new Blob([dataStr], {type: 'application/json'});
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
+            var dataStr = JSON.stringify(exportData, null, 2);
+            var dataBlob = new Blob([dataStr], {type: 'application/json'});
+            var url = URL.createObjectURL(dataBlob);
+            var link = document.createElement('a');
             link.href = url;
-            link.download = `trucking-data-${new Date().toISOString().split('T')[0]}.json`;
+            link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
             link.click();
+            URL.revokeObjectURL(url);
         }
 
-        // Import data
         function importData(event) {
-            const file = event.target.files[0];
+            var file = event.target.files[0];
             if (!file) return;
             
-            const reader = new FileReader();
+            var reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const importedData = JSON.parse(e.target.result);
+                    var importedData = JSON.parse(e.target.result);
                     if (importedData.loads && importedData.expenses) {
                         if (confirm('This will replace all existing data. Continue?')) {
                             saveData(importedData.loads, importedData.expenses);
@@ -1021,14 +837,13 @@
                         alert('Invalid file format');
                     }
                 } catch (error) {
-                    alert('Error reading file: ' + error.message);
+                    alert('Error reading file');
                 }
             };
             reader.readAsText(file);
             event.target.value = '';
         }
 
-        // Clear all data
         function clearAllData() {
             if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
                 if (confirm('Last chance - this will permanently delete everything!')) {
@@ -1040,7 +855,6 @@
             }
         }
 
-        // Initialize display
         updateDisplay();
     </script>
 </body>
