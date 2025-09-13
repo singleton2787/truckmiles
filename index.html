@@ -434,6 +434,16 @@
         .collapsible-content.collapsed {
             max-height: 0;
         }
+
+        .order-highlight {
+            background: #3498db;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            display: inline-block;
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
@@ -484,6 +494,11 @@
                     <h2>📝 Add New Load</h2>
                     <form id="loadForm">
                         <div class="form-grid">
+                            <div class="form-group">
+                                <label for="orderNumber">Order Number</label>
+                                <input type="text" id="orderNumber" name="orderNumber" placeholder="Order/Dispatch #">
+                            </div>
+                            
                             <div class="form-group">
                                 <label for="date">Date</label>
                                 <input type="date" id="date" name="date" required>
@@ -772,6 +787,7 @@
             const load = {
                 id: Date.now(),
                 type: 'load',
+                loadNumber: formData.get('loadNumber'),
                 date: formData.get('date'),
                 miles: miles,
                 origin: formData.get('origin'),
@@ -868,12 +884,12 @@
             const avgProfitPerMile = totalMiles > 0 ? netProfit / totalMiles : 0;
             
             // Update stats
-            document.getElementById('totalRevenue').textContent = '$' + totalRevenue.toFixed(2);
-            document.getElementById('totalExpenses').textContent = '$' + totalExpenses.toFixed(2);
-            document.getElementById('netProfit').textContent = '$' + netProfit.toFixed(2);
+            document.getElementById('totalRevenue').textContent = ' + totalRevenue.toFixed(2);
+            document.getElementById('totalExpenses').textContent = ' + totalExpenses.toFixed(2);
+            document.getElementById('netProfit').textContent = ' + netProfit.toFixed(2);
             document.getElementById('totalMiles').textContent = totalMiles.toLocaleString();
             document.getElementById('totalLoads').textContent = totalLoads;
-            document.getElementById('avgProfitPerMile').textContent = '$' + avgProfitPerMile.toFixed(3);
+            document.getElementById('avgProfitPerMile').textContent = ' + avgProfitPerMile.toFixed(3);
             
             // Update profit card color
             const profitCard = document.getElementById('netProfit').parentElement;
@@ -912,18 +928,21 @@
                     return `
                         <div class="history-item">
                             <button class="delete-btn" onclick="deleteItem(${item.id}, 'load')">Delete</button>
-                            <h3>🚛 Load - ${new Date(item.date).toLocaleDateString()}</h3>
+                            <h3>
+                                🚛 Load - ${new Date(item.date).toLocaleDateString()}
+                                ${item.loadNumber ? `<span class="order-highlight">#${item.loadNumber}</span>` : ''}
+                            </h3>
                             <div class="details">
                                 <div class="detail-item">
                                     <strong>${item.miles}</strong>
                                     <span>Miles</span>
                                 </div>
                                 <div class="detail-item">
-                                    <strong>$${item.revenue.toFixed(2)}</strong>
+                                    <strong>${item.revenue.toFixed(2)}</strong>
                                     <span>Revenue</span>
                                 </div>
                                 <div class="detail-item">
-                                    <strong>$${(item.revenue / item.miles).toFixed(3)}</strong>
+                                    <strong>${(item.revenue / item.miles).toFixed(3)}</strong>
                                     <span>Per Mile</span>
                                 </div>
                             </div>
@@ -945,7 +964,7 @@
                                     <span>Category</span>
                                 </div>
                                 <div class="detail-item">
-                                    <strong>$${item.amount.toFixed(2)}</strong>
+                                    <strong>${item.amount.toFixed(2)}</strong>
                                     <span>Amount</span>
                                 </div>
                                 ${item.miles ? `
@@ -954,7 +973,7 @@
                                         <span>Miles</span>
                                     </div>
                                     <div class="detail-item">
-                                        <strong>$${(item.amount / item.miles).toFixed(3)}</strong>
+                                        <strong>${(item.amount / item.miles).toFixed(3)}</strong>
                                         <span>Per Mile</span>
                                     </div>
                                 ` : ''}
