@@ -383,11 +383,11 @@
 
         <div class="main-content">
             <div class="tabs">
-                <button class="tab active" onclick="showTab('load')">Add Load</button>
-                <button class="tab" onclick="showTab('expenses')">Add Expenses</button>
-                <button class="tab" onclick="showTab('rates')">Rates</button>
-                <button class="tab" onclick="showTab('history')">History</button>
-                <button class="tab" onclick="showTab('data')">Data</button>
+                <button class="tab active" onclick="showTab('load', this)">Add Load</button>
+                <button class="tab" onclick="showTab('expenses', this)">Add Expenses</button>
+                <button class="tab" onclick="showTab('rates', this)">Rates</button>
+                <button class="tab" onclick="showTab('history', this)">History</button>
+                <button class="tab" onclick="showTab('data', this)">Data</button>
             </div>
 
             <div id="load" class="tab-content active">
@@ -461,7 +461,6 @@
                                     <option value="insurance-physical">Insurance - Physical Damage</option>
                                     <option value="insurance-bobtail">Insurance - Bobtail</option>
                                     <option value="insurance-workcomp">Insurance - Work Comp</option>
-                                    <option value="phone-internet">Phone & Internet</option>
                                     <option value="other">Other</option>
                                 </select>
                             </div>
@@ -519,9 +518,9 @@
                 <div class="section">
                     <h2>Load & Expense History</h2>
                     <div style="margin-bottom: 20px;">
-                        <button class="btn" onclick="showHistoryType('loads')">Loads</button>
-                        <button class="btn" onclick="showHistoryType('expenses')">Expenses</button>
-                        <button class="btn" onclick="showHistoryType('all')">All</button>
+                        <button class="btn" onclick="showHistoryType('loads', this)">Loads</button>
+                        <button class="btn" onclick="showHistoryType('expenses', this)">Expenses</button>
+                        <button class="btn" onclick="showHistoryType('all', this)">All</button>
                     </div>
                     <div id="historyContainer"></div>
                 </div>
@@ -569,19 +568,19 @@
             document.getElementById('ratePerMile').textContent = rate.toFixed(3);
         });
 
-        function showTab(tabName) {
+        function showTab(tabName, element) {
             var contents = document.querySelectorAll('.tab-content');
-            for (var i = 0; i < contents.length; i++) {
-                contents[i].classList.remove('active');
-            }
+            contents.forEach(content => content.classList.remove('active'));
             
             var tabs = document.querySelectorAll('.tab');
-            for (var i = 0; i < tabs.length; i++) {
-                tabs[i].classList.remove('active');
-            }
+            tabs.forEach(tab => tab.classList.remove('active'));
             
             document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
+            element.classList.add('active');
+
+            if (tabName === 'history') {
+                updateHistoryDisplay();
+            }
         }
 
         function loadData() {
@@ -700,31 +699,20 @@
             }
         }
 
-        function showHistoryType(type) {
+        function showHistoryType(type, element) {
             currentHistoryFilter = type;
+            document.querySelectorAll('#history button.btn').forEach(btn => btn.classList.remove('active'));
+            element.classList.add('active');
             updateHistoryDisplay();
         }
 
         function updateDisplay() {
             var data = loadData();
             
-            var totalRevenue = 0;
-            for (var i = 0; i < data.loads.length; i++) {
-                totalRevenue += data.loads[i].revenue || 0;
-            }
-            
-            var totalExpenses = 0;
-            for (var i = 0; i < data.expenses.length; i++) {
-                totalExpenses += data.expenses[i].amount || 0;
-            }
-            
+            var totalRevenue = data.loads.reduce((sum, load) => sum + (load.revenue || 0), 0);
+            var totalExpenses = data.expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
             var netProfit = totalRevenue - totalExpenses;
-            
-            var totalMiles = 0;
-            for (var i = 0; i < data.loads.length; i++) {
-                totalMiles += data.loads[i].miles || 0;
-            }
-            
+            var totalMiles = data.loads.reduce((sum, load) => sum + (load.miles || 0), 0);
             var totalLoads = data.loads.length;
             var avgProfitPerMile = totalMiles > 0 ? netProfit / totalMiles : 0;
             
@@ -781,46 +769,46 @@
                     var revenue = item.revenue || 0;
                     var perMile = miles > 0 ? (revenue / miles) : 0;
                     
-                    htmlContent += '<div class="history-item">';
-                    htmlContent += '<button class="delete-btn" onclick="deleteItem(' + item.id + ', \'load\')">Delete</button>';
-                    htmlContent += '<h3>Load - ' + new Date(item.date).toLocaleDateString();
+                    htmlContent += `<div class="history-item">`;
+                    htmlContent += `<button class="delete-btn" onclick="deleteItem(${item.id}, 'load')">Delete</button>`;
+                    htmlContent += `<h3>Load - ${new Date(item.date).toLocaleDateString()}`;
                     if (loadNumber) {
-                        htmlContent += '<span class="order-highlight">#' + loadNumber + '</span>';
+                        htmlContent += `<span class="order-highlight">#${loadNumber}</span>`;
                     }
-                    htmlContent += '</h3>';
-                    htmlContent += '<div class="details">';
-                    htmlContent += '<div class="detail-item"><strong>' + miles + '</strong><span>Miles</span></div>';
-                    htmlContent += '<div class="detail-item"><strong>$' + revenue.toFixed(2) + '</strong><span>Revenue</span></div>';
-                    htmlContent += '<div class="detail-item"><strong>$' + perMile.toFixed(3) + '</strong><span>Per Mile</span></div>';
-                    htmlContent += '</div>';
+                    htmlContent += `</h3>`;
+                    htmlContent += `<div class="details">`;
+                    htmlContent += `<div class="detail-item"><strong>${miles}</strong><span>Miles</span></div>`;
+                    htmlContent += `<div class="detail-item"><strong>$${revenue.toFixed(2)}</strong><span>Revenue</span></div>`;
+                    htmlContent += `<div class="detail-item"><strong>$${perMile.toFixed(3)}</strong><span>Per Mile</span></div>`;
+                    htmlContent += `</div>`;
                     if (origin !== 'N/A' || destination !== 'N/A') {
-                        htmlContent += '<p><strong>Route:</strong> ' + origin + ' to ' + destination + '</p>';
+                        htmlContent += `<p><strong>Route:</strong> ${origin} to ${destination}</p>`;
                     }
                     if (notes) {
-                        htmlContent += '<p><strong>Notes:</strong> ' + notes + '</p>';
+                        htmlContent += `<p><strong>Notes:</strong> ${notes}</p>`;
                     }
-                    htmlContent += '</div>';
+                    htmlContent += `</div>`;
                 } else {
                     var categoryName = item.category || '';
                     var notes = item.notes || '';
                     var amount = item.amount || 0;
                     var miles = item.miles || 0;
                     
-                    htmlContent += '<div class="history-item" style="border-left-color: #e74c3c;">';
-                    htmlContent += '<button class="delete-btn" onclick="deleteItem(' + item.id + ', \'expense\')">Delete</button>';
-                    htmlContent += '<h3>Expense - ' + new Date(item.date).toLocaleDateString() + '</h3>';
-                    htmlContent += '<div class="details">';
-                    htmlContent += '<div class="detail-item"><strong>' + categoryName + '</strong><span>Category</span></div>';
-                    htmlContent += '<div class="detail-item"><strong>$' + amount.toFixed(2) + '</strong><span>Amount</span></div>';
+                    htmlContent += `<div class="history-item" style="border-left-color: #e74c3c;">`;
+                    htmlContent += `<button class="delete-btn" onclick="deleteItem(${item.id}, 'expense')">Delete</button>`;
+                    htmlContent += `<h3>Expense - ${new Date(item.date).toLocaleDateString()}</h3>`;
+                    htmlContent += `<div class="details">`;
+                    htmlContent += `<div class="detail-item"><strong>${categoryName}</strong><span>Category</span></div>`;
+                    htmlContent += `<div class="detail-item"><strong>$${amount.toFixed(2)}</strong><span>Amount</span></div>`;
                     if (miles > 0) {
-                        htmlContent += '<div class="detail-item"><strong>' + miles + '</strong><span>Miles</span></div>';
-                        htmlContent += '<div class="detail-item"><strong>$' + (amount / miles).toFixed(3) + '</strong><span>Per Mile</span></div>';
+                        htmlContent += `<div class="detail-item"><strong>${miles}</strong><span>Miles</span></div>`;
+                        htmlContent += `<div class="detail-item"><strong>$${(amount / miles).toFixed(3)}</strong><span>Per Mile</span></div>`;
                     }
-                    htmlContent += '</div>';
+                    htmlContent += `</div>`;
                     if (notes) {
-                        htmlContent += '<p><strong>Notes:</strong> ' + notes + '</p>';
+                        htmlContent += `<p><strong>Notes:</strong> ${notes}</p>`;
                     }
-                    htmlContent += '</div>';
+                    htmlContent += `</div>`;
                 }
             }
             
