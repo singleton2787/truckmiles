@@ -159,12 +159,20 @@ function addLoad() {
     var destination = document.getElementById('destination').value || '';
     var notes = document.getElementById('notes').value || '';
     
+    // New fields for detention, layover, and breakdown pay
+    var detentionPay = parseFloat(document.getElementById('detentionPay').value) || 0;
+    var layoverPay = parseFloat(document.getElementById('layoverPay').value) || 0;
+    var breakdownPay = parseFloat(document.getElementById('breakdownPay').value) || 0;
+
     if (!date || miles <= 0) {
         alert('Please enter a valid date and miles');
         return;
     }
     
     var pay = calculatePay(miles);
+
+    // Add new pay types to the total revenue for this load
+    var totalLoadRevenue = pay + detentionPay + layoverPay + breakdownPay;
     
     var load = {
         id: Date.now(),
@@ -175,7 +183,10 @@ function addLoad() {
         origin: origin,
         destination: destination,
         notes: notes,
-        revenue: pay
+        revenue: totalLoadRevenue,
+        detention: detentionPay,
+        layover: layoverPay,
+        breakdown: breakdownPay
     };
     
     var data = loadData();
@@ -973,6 +984,8 @@ function getPLDateRange(period) {
 function updatePLDisplay() {
     var data = loadData();
     const VARIABLE_COST_PER_MILE = 0.372;
+    const FIXED_COSTS_WEEKLY = 277;
+    const TRUCK_PAYMENT_WEEKLY = 835;
     
     var dateRange = getPLDateRange(currentPLPeriod);
     var start = dateRange.start;
@@ -1017,12 +1030,23 @@ function updatePLDisplay() {
     var variableCosts = totalMiles * VARIABLE_COST_PER_MILE;
     var grossProfit = totalRevenue - variableCosts;
     
-    // Calculate period-based fixed costs
+    // Calculate prorated fixed costs based on the number of days in the period
     var periodDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-    var weeksInPeriod = periodDays / 7;
     
-    var fixedCosts = 277 * weeksInPeriod;
-    var truckPayment = 835 * weeksInPeriod;
+    // Check if the period is from the start of the month, or if it's the first load
+    const firstLoadDate = data.loads.length > 0 ? new Date(data.loads[data.loads.length - 1].date) : null;
+    const isFirstLoadMonth = firstLoadDate && firstLoadDate.getMonth() === start.getMonth() && firstLoadDate.getFullYear() === start.getFullYear();
+
+    if (isFirstLoadMonth) {
+        // Recalculate periodDays from the first load date
+        const firstLoadDayOfMonth = firstLoadDate.getDate();
+        const endDayOfMonth = end.getDate();
+        periodDays = endDayOfMonth - firstLoadDayOfMonth + 1;
+    }
+
+    var fixedCosts = (FIXED_COSTS_WEEKLY / 7) * periodDays;
+    var truckPayment = (TRUCK_PAYMENT_WEEKLY / 7) * periodDays;
+    
     var manualExpenses = periodExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
     
     var totalOperatingExpenses = fixedCosts + truckPayment + manualExpenses;
