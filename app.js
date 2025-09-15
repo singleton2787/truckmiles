@@ -159,19 +159,16 @@ function addLoad() {
     var destination = document.getElementById('destination').value || '';
     var notes = document.getElementById('notes').value || '';
     
-    // New fields for detention, layover, and breakdown pay
     var detentionPay = parseFloat(document.getElementById('detentionPay').value) || 0;
     var layoverPay = parseFloat(document.getElementById('layoverPay').value) || 0;
     var breakdownPay = parseFloat(document.getElementById('breakdownPay').value) || 0;
-
+    
     if (!date || miles <= 0) {
         alert('Please enter a valid date and miles');
         return;
     }
     
     var pay = calculatePay(miles);
-
-    // Add new pay types to the total revenue for this load
     var totalLoadRevenue = pay + detentionPay + layoverPay + breakdownPay;
     
     var load = {
