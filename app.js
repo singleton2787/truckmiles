@@ -76,6 +76,7 @@ var currentHistoryFilter = 'all';
 var weeklyGaugeChart = null;
 var incentiveGaugeChart = null;
 var currentEditingItem = null;
+var currentPLPeriod = 'current-month';
 
 // ===== INITIALIZATION =====
 
@@ -83,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeWeeklyGauge();
     initializeIncentiveGauge();
     initializeEventListeners();
+    checkBackupReminder();
     updateDisplay();
 });
 
@@ -142,6 +144,8 @@ function showTab(tabName, element) {
 
     if (tabName === 'history') {
         updateHistoryDisplay();
+    } else if (tabName === 'pl') {
+        updatePLDisplay();
     }
 }
 
@@ -633,6 +637,7 @@ function updateDisplay() {
     updateWeeklyGauge();
     updateIncentiveGauge();
     updatePayCyclePreview();
+    updatePLDisplay();
 }
 
 // ===== GAUGE UPDATES =====
@@ -857,6 +862,4688 @@ function showRawData() {
     var data = loadData();
     var formattedData = JSON.stringify(data, null, 2);
     document.getElementById('dataDisplayArea').textContent = formattedData;
+}
+
+// ===== BACKUP REMINDER SYSTEM =====
+
+function checkBackupReminder() {
+    var lastExportDate = localStorage.getItem('lastExportDate');
+    var now = new Date();
+    
+    if (!lastExportDate) {
+        // First time user - set last export to now, no reminder yet
+        localStorage.setItem('lastExportDate', now.toISOString());
+        return;
+    }
+    
+    var daysSinceExport = (now - new Date(lastExportDate)) / (1000 * 60 * 60 * 24);
+    
+    if (daysSinceExport >= 30) {
+        setTimeout(function() {
+            showBackupReminder();
+        }, 2000); // Show after 2 seconds to not interrupt initial load
+    }
+}
+
+function showBackupReminder() {
+    var shouldExport = confirm(
+        "📱 Backup Reminder\n\n" +
+        "It's been 30+ days since your last data export.\n\n" +
+        "Would you like to backup your trucking data now?\n\n" +
+        "This saves your loads and expenses to your device so you don't lose your records."
+    );
+    
+    if (shouldExport) {
+        exportData();
+    } else {
+        // Ask again in 7 days
+        var nextReminder = new Date();
+        nextReminder.setDate(nextReminder.getDate() - 23); // 30-7=23 days ago
+        localStorage.setItem('lastExportDate', nextReminder.toISOString());
+    }
+}
+
+// Update export function to track last export date
+var originalExportData = exportData;
+function exportData() {
+    originalExportData();
+    localStorage.setItem('lastExportDate', new Date().toISOString());
+}
+
+// ===== PROFIT & LOSS FUNCTIONALITY =====
+
+function showPLPeriod(period, element) {
+    currentPLPeriod = period;
+    document.querySelectorAll('#pl button.btn').forEach(btn => btn.classList.remove('active'));
+    element.classList.add('active');
+    updatePLDisplay();
+}
+
+function getPLDateRange(period) {
+    var now = new Date();
+    var start, end, title;
+    
+    switch(period) {
+        case 'current-month':
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            title = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            break;
+            
+        case 'last-month':
+            start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            end = new Date(now.getFullYear(), now.getMonth(), 0);
+            title = start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            break;
+            
+        case 'ytd':
+            start = new Date(now.getFullYear(), 0, 1);
+            end = now;
+            title = now.getFullYear() + ' Year to Date';
+            break;
+            
+        default:
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            title = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+    
+    return { start, end, title };
+}
+
+function updatePLDisplay() {
+    var data = loadData();
+    const VARIABLE_COST_PER_MILE = 0.372;
+    
+    var dateRange = getPLDateRange(currentPLPeriod);
+    var start = dateRange.start;
+    var end = dateRange.end;
+    
+    // Filter data for the selected period
+    var periodLoads = data.loads.filter(load => {
+        var loadDate = new Date(load.date);
+        return loadDate >= start && loadDate <= end;
+    });
+    
+    var periodExpenses = data.expenses.filter(expense => {
+        var expenseDate = new Date(expense.date);
+        return expenseDate >= start && expenseDate <= end;
+    });
+    
+    // Calculate revenue
+    var loadRevenue = periodLoads.reduce((sum, load) => sum + (load.revenue || 0), 0);
+    var totalMiles = periodLoads.reduce((sum, load) => sum + (load.miles || 0), 0);
+    
+    // Calculate incentive pay based on period
+    var incentivePay = 0;
+    if (currentPLPeriod === 'current-month') {
+        // Use current month miles for incentive calculation
+        var monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        var monthMiles = data.loads.filter(load => {
+            var loadDate = new Date(load.date);
+            return loadDate >= monthStart && loadDate <= new Date();
+        }).reduce((sum, load) => sum + (load.miles || 0), 0);
+        
+        var incentiveRate = 0;
+        if (monthMiles >= 8000) incentiveRate = 0.07;
+        else if (monthMiles >= 6000) incentiveRate = 0.06;
+        else if (monthMiles >= 4000) incentiveRate = 0.05;
+        
+        incentivePay = monthMiles * incentiveRate;
+    }
+    
+    var totalRevenue = loadRevenue + incentivePay;
+    
+    // Calculate costs
+    var variableCosts = totalMiles * VARIABLE_COST_PER_MILE;
+    var grossProfit = totalRevenue - variableCosts;
+    
+    // Calculate period-based fixed costs
+    var periodDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    var weeksInPeriod = periodDays / 7;
+    
+    var fixedCosts = 277 * weeksInPeriod;
+    var truckPayment = 835 * weeksInPeriod;
+    var manualExpenses = periodExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+    
+    var totalOperatingExpenses = fixedCosts + truckPayment + manualExpenses;
+    var netProfit = grossProfit - totalOperatingExpenses;
+    
+    // Calculate metrics
+    var profitPerMile = totalMiles > 0 ? netProfit / totalMiles : 0;
+    var profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    var revenuePerMile = totalMiles > 0 ? totalRevenue / totalMiles : 0;
+    var totalCosts = variableCosts + totalOperatingExpenses;
+    var costPerMile = totalMiles > 0 ? totalCosts / totalMiles : 0;
+    
+    // Update display
+    document.getElementById('plPeriodTitle').textContent = dateRange.title;
+    document.getElementById('plLoadRevenue').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + loadRevenue.toFixed(2);
+    document.getElementById('plIncentivePay').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + incentivePay.toFixed(2);
+    document.getElementById('plTotalRevenue').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + totalRevenue.toFixed(2);
+    
+    document.getElementById('plTotalMiles').textContent = totalMiles.toLocaleString();
+    document.getElementById('plVariableCosts').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + variableCosts.toFixed(2);
+    document.getElementById('plGrossProfit').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + grossProfit.toFixed(2);
+    
+    document.getElementById('plFixedCosts').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + fixedCosts.toFixed(2);
+    document.getElementById('plTruckPayment').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + truckPayment.toFixed(2);
+    document.getElementById('plManualExpenses').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + manualExpenses.toFixed(2);
+    
+    document.getElementById('plNetProfit').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + netProfit.toFixed(2);
+    
+    document.getElementById('plProfitPerMile').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + profitPerMile.toFixed(3);
+    document.getElementById('plProfitMargin').textContent = profitMargin.toFixed(1) + '%';
+    document.getElementById('plRevenuePerMile').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + revenuePerMile.toFixed(3);
+    document.getElementById('plCostPerMile').textContent = ' + currentCycleRevenue.toFixed(2);
+    document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
+    document.getElementById('currentCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleVariableCosts.toFixed(2);
+    document.getElementById('currentCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + currentCycleProfit.toFixed(2);
+    
+    document.getElementById('nextCycleRevenue').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleRevenue.toFixed(2);
+    document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
+    document.getElementById('nextCycleVariableCosts').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleVariableCosts.toFixed(2);
+    document.getElementById('nextCycleProfit').textContent = '
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + nextCycleProfit.toFixed(2);
+}
+
+// ===== DATA EXPORT/IMPORT =====
+
+function exportData() {
+    var data = loadData();
+    var exportData = {
+        loads: data.loads,
+        expenses: data.expenses,
+        exportDate: new Date().toISOString()
+    };
+    var dataStr = JSON.stringify(exportData, null, 2);
+    var dataBlob = new Blob([dataStr], {type: 'application/json'});
+    var url = URL.createObjectURL(dataBlob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trucking-data-' + new Date().toISOString().split('T')[0] + '.json';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var importedData = JSON.parse(e.target.result);
+            if (importedData.loads && importedData.expenses) {
+                if (confirm('This will replace all existing data. Continue?')) {
+                    saveData(importedData.loads, importedData.expenses);
+                    updateDisplay();
+                    alert('Data imported successfully!');
+                }
+            } else {
+                alert('Invalid file format');
+            }
+        } catch (error) {
+            alert('Error reading file');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function clearAllData() {
+    if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+        if (confirm('Last chance - this will permanently delete everything!')) {
+            localStorage.removeItem('loads');
+            localStorage.removeItem('expenses');
+            updateDisplay();
+            alert('All data cleared');
+        }
+    }
+}
+
+function showRawData() {
+    var data = loadData();
+    var formattedData = JSON.stringify(data, null, 2);
+    document.getElementById('dataDisplayArea').textContent = formattedData;
+} + costPerMile.toFixed(3);
+    
+    // Color code net profit
+    var netProfitElement = document.getElementById('plNetProfit');
+    if (netProfit >= 0) {
+        netProfitElement.style.color = '#27ae60';
+    } else {
+        netProfitElement.style.color = '#e74c3c';
+    }
 } + currentCycleRevenue.toFixed(2);
     document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
     document.getElementById('currentCycleVariableCosts').textContent = '
