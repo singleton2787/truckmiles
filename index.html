@@ -543,8 +543,8 @@
                 </div>
                 <div class="gauge-info">
                     <div class="gauge-info-item">
-                        <p>4-Week Miles:</p>
-                        <strong id="fourWeekMiles">0</strong>
+                        <p>Month Miles:</p>
+                        <strong id="monthMiles">0</strong>
                     </div>
                     <div class="gauge-info-item">
                         <p>Incentive Rate:</p>
@@ -672,10 +672,10 @@
             <div id="pay-cycle" class="tab-content">
                 <div class="section">
                     <h2>Pay Cycle Preview</h2>
-                    <p>Pay cycle ends Tuesday at midnight. The next check will be for loads delivered from Wednesday through Tuesday.</p>
+                    <p>Pay cycle runs Wednesday to Tuesday (midnight to midnight). Current settlement cycle ends at midnight next Tuesday.</p>
                     <div class="pay-cycle-stats">
                         <div class="pay-cycle-card">
-                            <h3>Current Pay Cycle (Next Check)</h3>
+                            <h3>Current Settlement Cycle (Next Check)</h3>
                             <div class="pay-cycle-stats">
                                 <div class="pay-cycle-stat">
                                     <p>Revenue:</p>
@@ -688,7 +688,7 @@
                             </div>
                         </div>
                         <div class="pay-cycle-card">
-                            <h3>Next Pay Cycle (Following Check)</h3>
+                            <h3>Next Settlement Cycle (Following Check)</h3>
                             <div class="pay-cycle-stats">
                                 <div class="pay-cycle-stat">
                                     <p>Revenue:</p>
@@ -772,6 +772,62 @@
             if (miles <= 1200) return miles * 1.20;
             if (miles <= 1800) return miles * 1.13;
             return miles * 1.12;
+        }
+
+        // Helper function to get Wednesday-Tuesday settlement cycle boundaries
+        function getSettlementCycleBoundaries(referenceDate = new Date()) {
+            var now = new Date(referenceDate);
+            var dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+            
+            // Calculate days until next Tuesday (cycle end)
+            var daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
+            
+            var cycleEnd = new Date(now);
+            cycleEnd.setDate(now.getDate() + daysUntilTuesday);
+            cycleEnd.setHours(23, 59, 59, 999);
+            
+            var cycleStart = new Date(cycleEnd);
+            cycleStart.setDate(cycleEnd.getDate() - 6);
+            cycleStart.setHours(0, 0, 0, 0);
+            
+            return { start: cycleStart, end: cycleEnd };
+        }
+
+        // Helper function to calculate prorated fixed costs
+        function getProratedFixedCosts(includeLease) {
+            const FIXED_COSTS_WEEKLY = 277;
+            const TRUCK_PAYMENT_WEEKLY = 835;
+            
+            var fullWeeklyCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
+            
+            var cycleBoundaries = getSettlementCycleBoundaries();
+            var now = new Date();
+            var cycleStart = cycleBoundaries.start;
+            var cycleEnd = cycleBoundaries.end;
+            
+            // If current time is before cycle start, we're in the previous cycle
+            if (now < cycleStart) {
+                var prevCycleEnd = new Date(cycleStart);
+                prevCycleEnd.setMilliseconds(prevCycleEnd.getMilliseconds() - 1);
+                var prevCycleStart = new Date(prevCycleEnd);
+                prevCycleStart.setDate(prevCycleEnd.getDate() - 6);
+                prevCycleStart.setHours(0, 0, 0, 0);
+                cycleStart = prevCycleStart;
+                cycleEnd = prevCycleEnd;
+            }
+            
+            var totalCycleMs = cycleEnd.getTime() - cycleStart.getTime();
+            var elapsedMs = Math.min(now.getTime() - cycleStart.getTime(), totalCycleMs);
+            elapsedMs = Math.max(0, elapsedMs);
+            
+            var cycleProgress = elapsedMs / totalCycleMs;
+            var proratedCosts = fullWeeklyCosts * cycleProgress;
+            
+            return {
+                prorated: proratedCosts,
+                full: fullWeeklyCosts,
+                progress: cycleProgress
+            };
         }
 
         var currentHistoryFilter = 'all';
@@ -935,7 +991,6 @@
             updateDisplay();
         });
 
-
         function updateDisplay() {
             var data = loadData();
             
@@ -1047,31 +1102,37 @@
             if (!weeklyGaugeChart) initializeWeeklyGauge();
 
             var data = loadData();
-            const FIXED_COSTS_WEEKLY = 277;
-            const TRUCK_PAYMENT_WEEKLY = 835;
             const VARIABLE_COST_PER_MILE = 0.372;
             
             var includeLease = document.getElementById('includeLease').checked;
             
-            var now = new Date();
-            var weekStart = new Date(now);
-            weekStart.setDate(now.getDate() - now.getDay()); 
-            weekStart.setHours(0, 0, 0, 0);
+            // Get current settlement cycle boundaries
+            var cycleBoundaries = getSettlementCycleBoundaries();
+            var cycleStart = cycleBoundaries.start;
+            var cycleEnd = cycleBoundaries.end;
             
+            // Filter loads for current settlement cycle
             var weeklyRevenue = data.loads.filter(load => {
                 var loadDate = new Date(load.date);
-                return loadDate >= weekStart;
+                return loadDate >= cycleStart && loadDate <= cycleEnd;
             }).reduce((sum, load) => sum + (load.revenue || 0), 0);
 
             var weeklyMiles = data.loads.filter(load => {
                 var loadDate = new Date(load.date);
-                return loadDate >= weekStart;
+                return loadDate >= cycleStart && loadDate <= cycleEnd;
             }).reduce((sum, load) => sum + (load.miles || 0), 0);
 
-            var totalFixedCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
+            // Calculate prorated fixed costs
+            var fixedCostInfo = getProratedFixedCosts(includeLease);
             var totalVariableCosts = weeklyMiles * VARIABLE_COST_PER_MILE;
-            var manuallyEnteredExpenses = data.expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
-            var totalWeeklyCosts = totalFixedCosts + totalVariableCosts + manuallyEnteredExpenses;
+            
+            // For weekly expenses, only include expenses within the current cycle
+            var weeklyManualExpenses = data.expenses.filter(expense => {
+                var expenseDate = new Date(expense.date);
+                return expenseDate >= cycleStart && expenseDate <= cycleEnd;
+            }).reduce((sum, expense) => sum + (expense.amount || 0), 0);
+            
+            var totalWeeklyCosts = fixedCostInfo.prorated + totalVariableCosts + weeklyManualExpenses;
             var weeklyProfit = weeklyRevenue - totalWeeklyCosts;
             
             let gaugeValue = 0;
@@ -1095,7 +1156,7 @@
             weeklyGaugeChart.update();
 
             document.getElementById('weeklyRevenue').textContent = '$' + weeklyRevenue.toFixed(2);
-            document.getElementById('totalFixedCosts').textContent = '$' + totalFixedCosts.toFixed(2);
+            document.getElementById('totalFixedCosts').textContent = '$' + fixedCostInfo.prorated.toFixed(2);
             document.getElementById('totalWeeklyCosts').textContent = '$' + totalWeeklyCosts.toFixed(2);
             document.getElementById('weeklyProfit').textContent = '$' + weeklyProfit.toFixed(2);
         }
@@ -1105,10 +1166,12 @@
 
             var data = loadData();
             var now = new Date();
-            var fourWeeksAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 28);
-            var fourWeekMiles = data.loads.filter(load => {
+            
+            // Get current calendar month miles (from 1st of month to today)
+            var monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            var monthMiles = data.loads.filter(load => {
                 var loadDate = new Date(load.date);
-                return loadDate >= fourWeeksAgo;
+                return loadDate >= monthStart && loadDate <= now;
             }).reduce((sum, load) => sum + (load.miles || 0), 0);
 
             let milesToNextTier = 0;
@@ -1118,39 +1181,39 @@
             let slice1 = 0, slice2 = 0, slice3 = 0, slice4 = 0, remaining = 0;
             let tiers = [4000, 6000, 8000];
 
-            if (fourWeekMiles >= tiers[2]) {
+            if (monthMiles >= tiers[2]) {
                 incentiveRate = 0.07;
                 milesToNextTier = 0;
                 slice1 = tiers[0];
                 slice2 = tiers[1] - tiers[0];
                 slice3 = tiers[2] - tiers[1];
-                slice4 = fourWeekMiles - tiers[2];
-            } else if (fourWeekMiles >= tiers[1]) {
+                slice4 = monthMiles - tiers[2];
+            } else if (monthMiles >= tiers[1]) {
                 incentiveRate = 0.06;
-                milesToNextTier = tiers[2] - fourWeekMiles;
+                milesToNextTier = tiers[2] - monthMiles;
                 slice1 = tiers[0];
                 slice2 = tiers[1] - tiers[0];
-                slice3 = fourWeekMiles - tiers[1];
-                remaining = totalMilesForGauge - fourWeekMiles;
-            } else if (fourWeekMiles >= tiers[0]) {
+                slice3 = monthMiles - tiers[1];
+                remaining = totalMilesForGauge - monthMiles;
+            } else if (monthMiles >= tiers[0]) {
                 incentiveRate = 0.05;
-                milesToNextTier = tiers[1] - fourWeekMiles;
+                milesToNextTier = tiers[1] - monthMiles;
                 slice1 = tiers[0];
-                slice2 = fourWeekMiles - tiers[0];
-                remaining = totalMilesForGauge - fourWeekMiles;
+                slice2 = monthMiles - tiers[0];
+                remaining = totalMilesForGauge - monthMiles;
             } else {
                 incentiveRate = 0.00;
-                milesToNextTier = tiers[0] - fourWeekMiles;
-                slice1 = fourWeekMiles;
-                remaining = totalMilesForGauge - fourWeekMiles;
+                milesToNextTier = tiers[0] - monthMiles;
+                slice1 = monthMiles;
+                remaining = totalMilesForGauge - monthMiles;
             }
 
             incentiveGaugeChart.data.datasets[0].data = [slice1, slice2, slice3, slice4, remaining];
             incentiveGaugeChart.data.datasets[0].backgroundColor = [`#dcdcdc`, `#f1c40f`, `#27ae60`, `#3498db`, `#ffffff`];
             incentiveGaugeChart.update();
             
-            var totalIncentivePay = fourWeekMiles * incentiveRate;
-            document.getElementById('fourWeekMiles').textContent = fourWeekMiles.toLocaleString();
+            var totalIncentivePay = monthMiles * incentiveRate;
+            document.getElementById('monthMiles').textContent = monthMiles.toLocaleString();
             document.getElementById('incentiveRate').textContent = '$' + incentiveRate.toFixed(2);
             document.getElementById('milesToNextTier').textContent = milesToNextTier.toLocaleString();
             document.getElementById('totalIncentivePay').textContent = '$' + totalIncentivePay.toFixed(2);
@@ -1158,18 +1221,17 @@
 
         function updatePayCyclePreview() {
             var data = loadData();
-            var now = new Date();
             
-            // Pay cycle runs from Wednesday to Tuesday
-            var currentPayCycleEnd = new Date(now);
-            var dayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
-            var daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
-            currentPayCycleEnd.setDate(now.getDate() + daysUntilTuesday);
-            currentPayCycleEnd.setHours(23, 59, 59, 999);
-
-            var currentPayCycleStart = new Date(currentPayCycleEnd);
-            currentPayCycleStart.setDate(currentPayCycleEnd.getDate() - 6);
-            currentPayCycleStart.setHours(0, 0, 0, 0);
+            // Get current settlement cycle boundaries
+            var currentCycleBoundaries = getSettlementCycleBoundaries();
+            
+            // Calculate next cycle boundaries
+            var nextCycleStart = new Date(currentCycleBoundaries.end);
+            nextCycleStart.setDate(nextCycleStart.getDate() + 1);
+            nextCycleStart.setHours(0, 0, 0, 0);
+            var nextCycleEnd = new Date(nextCycleStart);
+            nextCycleEnd.setDate(nextCycleEnd.getDate() + 6);
+            nextCycleEnd.setHours(23, 59, 59, 999);
 
             var currentCycleRevenue = 0;
             var currentCycleMiles = 0;
@@ -1178,10 +1240,10 @@
 
             data.loads.forEach(load => {
                 var loadDate = new Date(load.date);
-                if (loadDate >= currentPayCycleStart && loadDate <= currentPayCycleEnd) {
+                if (loadDate >= currentCycleBoundaries.start && loadDate <= currentCycleBoundaries.end) {
                     currentCycleRevenue += load.revenue || 0;
                     currentCycleMiles += load.miles || 0;
-                } else if (loadDate > currentPayCycleEnd) {
+                } else if (loadDate >= nextCycleStart && loadDate <= nextCycleEnd) {
                     nextCycleRevenue += load.revenue || 0;
                     nextCycleMiles += load.miles || 0;
                 }
