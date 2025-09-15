@@ -474,7 +474,208 @@
             padding: 8px;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 480px) {
+            .container {
+                margin: 2px;
+                border-radius: 8px;
+            }
+            
+            .header {
+                padding: 12px;
+            }
+            
+            .header h1 {
+                font-size: 1.4em;
+            }
+            
+            .header p {
+                font-size: 0.9em;
+            }
+            
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+                padding: 10px;
+            }
+            
+            .stat-card {
+                padding: 12px;
+            }
+            
+            .stat-card h3 {
+                font-size: 1.1em;
+            }
+            
+            .stat-card p {
+                font-size: 0.8em;
+            }
+
+            .gauge-container {
+                grid-template-columns: 1fr;
+                padding: 10px;
+                gap: 15px;
+            }
+            
+            .gauge-card {
+                padding: 15px;
+            }
+            
+            .gauge-card h2 {
+                font-size: 1.2em;
+            }
+            
+            .gauge-info {
+                grid-template-columns: 1fr 1fr;
+                gap: 5px;
+            }
+            
+            .gauge-info-item {
+                padding: 6px;
+            }
+            
+            .gauge-info-item p {
+                font-size: 0.7em;
+            }
+            
+            .gauge-info-item strong {
+                font-size: 1em;
+            }
+            
+            .main-content {
+                padding: 10px;
+            }
+            
+            .tabs {
+                margin-bottom: 15px;
+                padding: 2px;
+            }
+            
+            .tab {
+                padding: 10px 8px;
+                font-size: 0.85em;
+                min-width: 80px;
+            }
+            
+            .tab-content {
+                padding: 15px;
+            }
+            
+            .section {
+                padding: 12px;
+                margin-bottom: 15px;
+            }
+            
+            .section h2 {
+                font-size: 1.1em;
+                margin-bottom: 15px;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .form-group input, .form-group textarea, .form-group select {
+                padding: 8px;
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+            
+            .btn {
+                padding: 10px 15px;
+                font-size: 13px;
+                margin-right: 5px;
+                margin-bottom: 8px;
+            }
+            
+            .pay-cycle-stats {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .pay-cycle-card {
+                padding: 12px;
+            }
+            
+            .pay-cycle-card h3 {
+                font-size: 1em;
+                margin-bottom: 10px;
+            }
+            
+            .pay-cycle-stat {
+                padding: 8px;
+            }
+            
+            .pay-cycle-stat p {
+                font-size: 0.8em;
+            }
+            
+            .pay-cycle-stat strong {
+                font-size: 1em;
+            }
+            
+            .history-item {
+                padding: 10px;
+            }
+            
+            .history-item h3 {
+                font-size: 1em;
+                margin-bottom: 8px;
+            }
+            
+            .details {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 5px;
+            }
+            
+            .detail-item {
+                padding: 6px;
+            }
+            
+            .detail-item strong {
+                font-size: 0.9em;
+            }
+            
+            .detail-item span {
+                font-size: 0.7em;
+            }
+            
+            .action-buttons {
+                position: static;
+                float: none;
+                margin-bottom: 8px;
+                display: flex;
+                gap: 5px;
+            }
+            
+            .edit-btn, .delete-btn {
+                padding: 4px 8px;
+                font-size: 10px;
+            }
+            
+            .edit-form {
+                padding: 12px;
+                margin-top: 10px;
+            }
+            
+            .edit-form h4 {
+                font-size: 1em;
+                margin-bottom: 10px;
+            }
+            
+            .edit-form .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .rate-table {
+                font-size: 0.8em;
+            }
+            
+            .rate-table th, .rate-table td {
+                padding: 6px;
+            }
+        }
+
+        @media (min-width: 481px) and (max-width: 768px) {
             .container {
                 margin: 5px;
                 border-radius: 10px;
@@ -489,7 +690,7 @@
             }
             
             .stats {
-                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
                 gap: 10px;
                 padding: 15px;
             }
@@ -511,6 +712,10 @@
             }
             
             .form-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+            
+            .pay-cycle-stats {
                 grid-template-columns: 1fr;
             }
         }
