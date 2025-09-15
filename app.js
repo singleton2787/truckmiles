@@ -15,6 +15,488 @@ function calculatePay(miles) {
 }
 
 // Helper function to get Wednesday-Tuesday settlement cycle boundaries
+function getSettlementCycleBoundaries(referenceDate) {
+    if (!referenceDate) referenceDate = new Date();
+    var now = new Date(referenceDate);
+    var dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
+    // Calculate days until next Tuesday (cycle end)
+    var daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
+    
+    var cycleEnd = new Date(now);
+    cycleEnd.setDate(now.getDate() + daysUntilTuesday);
+    cycleEnd.setHours(23, 59, 59, 999);
+    
+    var cycleStart = new Date(cycleEnd);
+    cycleStart.setDate(cycleEnd.getDate() - 6);
+    cycleStart.setHours(0, 0, 0, 0);
+    
+    return { start: cycleStart, end: cycleEnd };
+}
+
+// Helper function to calculate prorated fixed costs
+function getProratedFixedCosts(includeLease) {
+    var FIXED_COSTS_WEEKLY = 277;
+    var TRUCK_PAYMENT_WEEKLY = 835;
+    
+    var fullWeeklyCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
+    
+    var cycleBoundaries = getSettlementCycleBoundaries();
+    var now = new Date();
+    var cycleStart = cycleBoundaries.start;
+    var cycleEnd = cycleBoundaries.end;
+    
+    // If current time is before cycle start, we're in the previous cycle
+    if (now < cycleStart) {
+        var prevCycleEnd = new Date(cycleStart);
+        prevCycleEnd.setMilliseconds(prevCycleEnd.getMilliseconds() - 1);
+        var prevCycleStart = new Date(prevCycleEnd);
+        prevCycleStart.setDate(prevCycleEnd.getDate() - 6);
+        prevCycleStart.setHours(0, 0, 0, 0);
+        cycleStart = prevCycleStart;
+        cycleEnd = prevCycleEnd;
+    }
+    
+    var totalCycleMs = cycleEnd.getTime() - cycleStart.getTime();
+    var elapsedMs = Math.min(now.getTime() - cycleStart.getTime(), totalCycleMs);
+    elapsedMs = Math.max(0, elapsedMs);
+    
+    var cycleProgress = elapsedMs / totalCycleMs;
+    var proratedCosts = fullWeeklyCosts * cycleProgress;
+    
+    return {
+        prorated: proratedCosts,
+        full: fullWeeklyCosts,
+        progress: cycleProgress
+    };
+}
+
+// ===== GLOBAL VARIABLES =====
+
+var currentHistoryFilter = 'all';
+var weeklyGaugeChart = null;
+var incentiveGaugeChart = null;
+var currentEditingItem = null;
+var currentPLPeriod = 'current-month';
+
+// ===== INITIALIZATION =====
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeWeeklyGauge();
+    initializeIncentiveGauge();
+    initializeEventListeners();
+    checkBackupReminder();
+    updateDisplay();
+});
+
+function initializeEventListeners() {
+    // Set default dates to today
+    document.getElementById('date').valueAsDate = new Date();
+    document.getElementById('expenseDate').valueAsDate = new Date();
+
+    // Miles input listener for real-time pay calculation
+    document.getElementById('miles').addEventListener('input', function() {
+        var miles = parseInt(this.value) || 0;
+        var pay = calculatePay(miles);
+        var rate = miles > 0 ? pay / miles : 0;
+        document.getElementById('calculatedPay').textContent = pay.toFixed(2);
+        document.getElementById('ratePerMile').textContent = rate.toFixed(3);
+    });
+
+    // Form submission listeners
+    document.getElementById('loadForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addLoad();
+    });
+
+    document.getElementById('expenseForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addExpense();
+    });
+}
+
+// ===== DATA MANAGEMENT =====
+
+function loadData() {
+    var loadsData = localStorage.getItem('loads');
+    var expensesData = localStorage.getItem('expenses');
+    return {
+        loads: loadsData ? JSON.parse(loadsData) : [],
+        expenses: expensesData ? JSON.parse(expensesData) : []
+    };
+}
+
+function saveData(loads, expenses) {
+    localStorage.setItem('loads', JSON.stringify(loads));
+    localStorage.setItem('expenses', JSON.stringify(expenses));
+}
+
+// ===== TAB MANAGEMENT =====
+
+function showTab(tabName, element) {
+    var contents = document.querySelectorAll('.tab-content');
+    contents.forEach(function(content) {
+        content.classList.remove('active');
+    });
+    
+    var tabs = document.querySelectorAll('.tab');
+    tabs.forEach(function(tab) {
+        tab.classList.remove('active');
+    });
+    
+    document.getElementById(tabName).classList.add('active');
+    element.classList.add('active');
+
+    if (tabName === 'history') {
+        updateHistoryDisplay();
+    } else if (tabName === 'pl') {
+        updatePLDisplay();
+    }
+}
+
+// ===== LOAD MANAGEMENT =====
+
+function addLoad() {
+    var loadNumber = document.getElementById('loadNumber').value || '';
+    var date = document.getElementById('date').value || '';
+    var miles = parseInt(document.getElementById('miles').value) || 0;
+    var origin = document.getElementById('origin').value || '';
+    var destination = document.getElementById('destination').value || '';
+    var notes = document.getElementById('notes').value || '';
+    
+    if (!date || miles <= 0) {
+        alert('Please enter a valid date and miles');
+        return;
+    }
+    
+    var pay = calculatePay(miles);
+    
+    var load = {
+        id: Date.now(),
+        type: 'load',
+        loadNumber: loadNumber,
+        date: date,
+        miles: miles,
+        origin: origin,
+        destination: destination,
+        notes: notes,
+        revenue: pay
+    };
+    
+    var data = loadData();
+    data.loads.unshift(load);
+    saveData(data.loads, data.expenses);
+    
+    updateDisplay();
+    clearForm();
+    alert('Load added successfully!');
+}
+
+function clearForm() {
+    document.getElementById('loadForm').reset();
+    document.getElementById('date').valueAsDate = new Date();
+    document.getElementById('calculatedPay').textContent = '0.00';
+    document.getElementById('ratePerMile').textContent = '0.00';
+}
+
+// ===== EXPENSE MANAGEMENT =====
+
+function addExpense() {
+    var date = document.getElementById('expenseDate').value || '';
+    var category = document.getElementById('expenseCategory').value || '';
+    var amount = parseFloat(document.getElementById('expenseAmount').value) || 0;
+    var miles = document.getElementById('expenseMiles').value ? parseInt(document.getElementById('expenseMiles').value) : null;
+    var notes = document.getElementById('expenseNotes').value || '';
+    
+    if (!date || !category || amount <= 0) {
+        alert('Please fill in date, category, and amount');
+        return;
+    }
+    
+    var expense = {
+        id: Date.now(),
+        type: 'expense',
+        date: date,
+        category: category,
+        amount: amount,
+        miles: miles,
+        notes: notes
+    };
+    
+    var data = loadData();
+    data.expenses.unshift(expense);
+    saveData(data.loads, data.expenses);
+    
+    updateDisplay();
+    clearExpenseForm();
+    alert('Expense added successfully!');
+}
+
+function clearExpenseForm() {
+    document.getElementById('expenseForm').reset();
+    document.getElementById('expenseDate').valueAsDate = new Date();
+}
+
+// ===== EDIT FUNCTIONALITY =====
+
+function editItem(id, type) {
+    var data = loadData();
+    var item = null;
+    
+    if (type === 'load') {
+        item = data.loads.find(function(load) { return load.id === id; });
+    } else {
+        item = data.expenses.find(function(expense) { return expense.id === id; });
+    }
+    
+    if (!item) {
+        alert('Item not found');
+        return;
+    }
+    
+    currentEditingItem = { item: item, type: type };
+    showEditForm(item, type);
+}
+
+function showEditForm(item, type) {
+    var historyContainer = document.getElementById('historyContainer');
+    var editFormHtml = '';
+    
+    if (type === 'load') {
+        editFormHtml = '<div class="edit-form" id="editForm">' +
+            '<h4>Edit Load #' + (item.loadNumber || 'N/A') + '</h4>' +
+            '<div class="form-grid">' +
+                '<div class="form-group">' +
+                    '<label>Load Number</label>' +
+                    '<input type="text" id="editLoadNumber" value="' + (item.loadNumber || '') + '" placeholder="Load/Dispatch #">' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Date</label>' +
+                    '<input type="date" id="editDate" value="' + item.date + '" required>' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Miles</label>' +
+                    '<input type="number" id="editMiles" value="' + item.miles + '" min="1" required placeholder="Miles driven">' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Origin</label>' +
+                    '<input type="text" id="editOrigin" value="' + (item.origin || '') + '" placeholder="Starting location">' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Destination</label>' +
+                    '<input type="text" id="editDestination" value="' + (item.destination || '') + '" placeholder="Ending location">' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Notes</label>' +
+                '<textarea id="editNotes" rows="2" placeholder="Additional details...">' + (item.notes || '') + '</textarea>' +
+            '</div>' +
+            '<button type="button" class="btn btn-success" onclick="saveEdit()">Save Changes</button>' +
+            '<button type="button" class="btn" onclick="cancelEdit()">Cancel</button>' +
+        '</div>';
+    } else {
+        var categoryOptions = [
+            { value: '', text: 'Select Category' },
+            { value: 'fuel-tractor', text: 'Fuel - Tractor' },
+            { value: 'fuel-tax', text: 'Fuel Tax' },
+            { value: 'maintenance', text: 'Maintenance & Repairs' },
+            { value: 'parking-tolls', text: 'Parking, Scales & Tolls' },
+            { value: 'supplies', text: 'Supplies' },
+            { value: 'travel-lodging', text: 'Travel & Lodging' },
+            { value: 'truck-payment', text: 'Truck Payment' },
+            { value: 'insurance-physical', text: 'Insurance - Physical Damage' },
+            { value: 'insurance-bobtail', text: 'Insurance - Bobtail' },
+            { value: 'insurance-workcomp', text: 'Insurance - Work Comp' },
+            { value: 'other', text: 'Other' }
+        ];
+        
+        var optionsHtml = '';
+        for (var i = 0; i < categoryOptions.length; i++) {
+            var option = categoryOptions[i];
+            var selected = item.category === option.value ? ' selected' : '';
+            optionsHtml += '<option value="' + option.value + '"' + selected + '>' + option.text + '</option>';
+        }
+        
+        editFormHtml = '<div class="edit-form" id="editForm">' +
+            '<h4>Edit Expense - ' + item.category + '</h4>' +
+            '<div class="form-grid">' +
+                '<div class="form-group">' +
+                    '<label>Date</label>' +
+                    '<input type="date" id="editExpenseDate" value="' + item.date + '" required>' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Category</label>' +
+                    '<select id="editExpenseCategory" required>' + optionsHtml + '</select>' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Amount ($)</label>' +
+                    '<input type="number" id="editExpenseAmount" value="' + item.amount + '" min="0" step="0.01" required placeholder="0.00">' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Miles (if applicable)</label>' +
+                    '<input type="number" id="editExpenseMiles" value="' + (item.miles || '') + '" min="0" placeholder="For per-mile expenses">' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label>Description/Notes</label>' +
+                '<textarea id="editExpenseNotes" rows="2" placeholder="Additional details...">' + (item.notes || '') + '</textarea>' +
+            '</div>' +
+            '<button type="button" class="btn btn-success" onclick="saveEdit()">Save Changes</button>' +
+            '<button type="button" class="btn" onclick="cancelEdit()">Cancel</button>' +
+        '</div>';
+    }
+    
+    historyContainer.insertAdjacentHTML('afterbegin', editFormHtml);
+    document.getElementById('editForm').scrollIntoView({ behavior: 'smooth' });
+}
+
+function saveEdit() {
+    if (!currentEditingItem) return;
+    
+    var data = loadData();
+    var item = currentEditingItem.item;
+    var type = currentEditingItem.type;
+    
+    if (type === 'load') {
+        var updatedLoad = {
+            id: item.id,
+            type: item.type,
+            loadNumber: document.getElementById('editLoadNumber').value || '',
+            date: document.getElementById('editDate').value || '',
+            miles: parseInt(document.getElementById('editMiles').value) || 0,
+            origin: document.getElementById('editOrigin').value || '',
+            destination: document.getElementById('editDestination').value || '',
+            notes: document.getElementById('editNotes').value || ''
+        };
+        
+        if (!updatedLoad.date || updatedLoad.miles <= 0) {
+            alert('Please enter a valid date and miles');
+            return;
+        }
+        
+        updatedLoad.revenue = calculatePay(updatedLoad.miles);
+        
+        var loadIndex = data.loads.findIndex(function(load) { return load.id === item.id; });
+        if (loadIndex !== -1) {
+            data.loads[loadIndex] = updatedLoad;
+        }
+    } else {
+        var updatedExpense = {
+            id: item.id,
+            type: item.type,
+            date: document.getElementById('editExpenseDate').value || '',
+            category: document.getElementById('editExpenseCategory').value || '',
+            amount: parseFloat(document.getElementById('editExpenseAmount').value) || 0,
+            miles: document.getElementById('editExpenseMiles').value ? parseInt(document.getElementById('editExpenseMiles').value) : null,
+            notes: document.getElementById('editExpenseNotes').value || ''
+        };
+        
+        if (!updatedExpense.date || !updatedExpense.category || updatedExpense.amount <= 0) {
+            alert('Please fill in date, category, and amount');
+            return;
+        }
+        
+        var expenseIndex = data.expenses.findIndex(function(expense) { return expense.id === item.id; });
+        if (expenseIndex !== -1) {
+            data.expenses[expenseIndex] = updatedExpense;
+        }
+    }
+    
+    saveData(data.loads, data.expenses);
+    cancelEdit();
+    updateDisplay();
+    alert('Changes saved successfully!');
+}
+
+function cancelEdit() {
+    var editForm = document.getElementById('editForm');
+    if (editForm) {
+        editForm.remove();
+    }
+    currentEditingItem = null;
+}
+
+// ===== DELETE FUNCTIONALITY =====
+
+function deleteItem(id, type) {
+    if (confirm('Are you sure you want to delete this ' + type + '?')) {
+        var data = loadData();
+        if (type === 'load') {
+            data.loads = data.loads.filter(function(item) { return item.id !== id; });
+        } else {
+            data.expenses = data.expenses.filter(function(item) { return item.id !== id; });
+        }
+        saveData(data.loads, data.expenses);
+        updateDisplay();
+    }
+}
+
+// ===== HISTORY DISPLAY =====
+
+function showHistoryType(type, element) {
+    currentHistoryFilter = type;
+    var buttons = document.querySelectorAll('#history button.btn');
+    buttons.forEach(function(btn) {
+        btn.classList.remove('active');
+    });
+    element.classList.add('active');
+    updateHistoryDisplay();
+}
+
+function updateHistoryDisplay() {
+    var data = loadData();
+    var historyContainer = document.getElementById('historyContainer');
+    var VARIABLE_COST_PER_MILE = 0.372;
+    
+    // Remove any existing edit form
+    var existingEditForm = document.getElementById('editForm');
+    if (existingEditForm) {
+        existingEditForm.remove();
+    }
+    
+    var items = [];
+    
+    if (currentHistoryFilter === 'loads' || currentHistoryFilter === 'all') {
+        items = items.concat(data.loads);
+    }
+    if (currentHistoryFilter === 'expenses' || currentHistoryFilter === 'all') {
+        items = items.concat(data.expenses);
+    }
+    
+    items.sort(function(a, b) {
+        return new Date(b.date) - new Date(a.date);
+    });
+    
+    if (items.length === 0) {
+        historyContainer.innerHTML = '<p>No records found. Add some loads and expenses!</p>';
+        return;
+    }
+    
+    var htmlContent = '';
+    
+    for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        
+        if (item.type === 'load') {
+            var loadNumber = item.loadNumber || '';
+            var origin = item.origin || 'N/A';
+            var// ===== CORE BUSINESS LOGIC =====
+
+function calculatePay(miles) {
+    if (miles <= 20) return miles * 2.85;
+    if (miles <= 75) return miles * 2.00;
+    if (miles <= 150) return miles * 1.85;
+    if (miles <= 275) return miles * 1.70;
+    if (miles <= 425) return miles * 1.45;
+    if (miles <= 600) return miles * 1.35;
+    if (miles <= 800) return miles * 1.28;
+    if (miles <= 1000) return miles * 1.25;
+    if (miles <= 1200) return miles * 1.20;
+    if (miles <= 1800) return miles * 1.13;
+    return miles * 1.12;
+}
+
+// Helper function to get Wednesday-Tuesday settlement cycle boundaries
 function getSettlementCycleBoundaries(referenceDate = new Date()) {
     var now = new Date(referenceDate);
     var dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
