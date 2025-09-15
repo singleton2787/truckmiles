@@ -731,15 +731,15 @@
         <div class="stats" id="stats">
             <div class="stat-card">
                 <h3 id="totalRevenue">$0.00</h3>
-                <p>Total Revenue</p>
+                <p title="Total income from all sources (loads, detention, layover, etc.).">Total Revenue</p>
             </div>
             <div class="stat-card expense">
                 <h3 id="totalExpenses">$0.00</h3>
-                <p>Total Expenses</p>
+                <p title="All business costs including fixed, variable, and manual expenses.">Total Expenses</p>
             </div>
             <div class="stat-card profit">
                 <h3 id="netProfit">$0.00</h3>
-                <p>Net Profit</p>
+                <p title="Total Revenue minus Total Expenses.">Net Profit</p>
             </div>
             <div class="stat-card">
                 <h3 id="totalMiles">0</h3>
@@ -751,11 +751,11 @@
             </div>
             <div class="stat-card">
                 <h3 id="avgCPM">$0.00</h3>
-                <p>Avg. CPM</p>
+                <p title="Average Cost Per Mile (CPM) across all miles driven.">Avg. CPM</p>
             </div>
             <div class="stat-card">
                 <h3 id="avgProfitPerMile">$0.00</h3>
-                <p>Avg Profit/Mile</p>
+                <p title="Average profit earned for each mile driven.">Avg Profit/Mile</p>
             </div>
         </div>
 
@@ -765,7 +765,7 @@
                 <div style="height: 150px;">
                     <canvas id="weeklyGaugeCanvas"></canvas>
                 </div>
-                <div class="lease-toggle">
+                <div class="lease-toggle" title="Check this box to include the $835 weekly truck payment in the current week's calculation. Uncheck to skip.">
                     <input type="checkbox" id="includeLease" checked onchange="updateDisplay()">
                     <label for="includeLease" style="display: inline;">Include this week's truck payment? ($835)</label>
                 </div>
@@ -775,7 +775,7 @@
                         <strong id="weeklyRevenue">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
-                        <p>Total Fixed Costs:</p>
+                        <p title="Prorated for the current week.">Total Fixed Costs:</p>
                         <strong id="totalFixedCosts">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
@@ -800,7 +800,7 @@
                         <strong id="monthMiles">0</strong>
                     </div>
                     <div class="gauge-info-item">
-                        <p>Incentive Rate:</p>
+                        <p title="The incentive rate is based on your total monthly miles.">Incentive Rate:</p>
                         <strong id="incentiveRate">$0.00</strong>
                     </div>
                     <div class="gauge-info-item">
@@ -832,17 +832,17 @@
                     <form id="loadForm">
                         <div class="form-grid">
                             <div class="form-group">
-                                <label for="loadNumber">Load Number</label>
+                                <label for="loadNumber" title="Enter the load or dispatch number here.">Load Number</label>
                                 <input type="text" id="loadNumber" name="loadNumber" placeholder="Load/Dispatch #">
                             </div>
                             
                             <div class="form-group">
-                                <label for="date">Load Drop Date</label>
+                                <label for="date" title="The date the load was dropped off.">Load Drop Date</label>
                                 <input type="date" id="date" name="date" required>
                             </div>
                             
                             <div class="form-group">
-                                <label for="miles">Load Miles</label>
+                                <label for="miles" title="The total number of miles for this load.">Load Miles</label>
                                 <input type="number" id="miles" name="miles" min="1" required placeholder="Miles driven">
                             </div>
                             
@@ -858,28 +858,28 @@
                         </div>
                         
                         <div class="form-group">
-                            <label for="notes">Notes</label>
+                            <label for="notes" title="Add any additional details or notes about the load.">Notes</label>
                             <textarea id="notes" name="notes" rows="2" placeholder="Additional details..."></textarea>
                         </div>
                         
                         <div class="form-grid">
                             <div class="form-group">
-                                <label for="detentionPay">Detention Pay ($)</label>
+                                <label for="detentionPay" title="Payment for delays at the shipper or receiver.">Detention Pay ($)</label>
                                 <input type="number" id="detentionPay" name="detentionPay" min="0" step="0.01" placeholder="0.00">
                             </div>
                             <div class="form-group">
-                                <label for="layoverPay">Layover Pay ($)</label>
+                                <label for="layoverPay" title="Payment for unexpected overnight stays.">Layover Pay ($)</label>
                                 <input type="number" id="layoverPay" name="layoverPay" min="0" step="0.01" placeholder="0.00">
                             </div>
                             <div class="form-group">
-                                <label for="breakdownPay">Breakdown Pay ($)</label>
+                                <label for="breakdownPay" title="Payment for time lost due to mechanical issues.">Breakdown Pay ($)</label>
                                 <input type="number" id="breakdownPay" name="breakdownPay" min="0" step="0.01" placeholder="0.00">
                             </div>
                         </div>
 
                         <div class="pay-summary" id="paySummary">
-                            <h3>Revenue: $<span id="calculatedPay">0.00</span></h3>
-                            <p>Rate: $<span id="ratePerMile">0.00</span>/mile</p>
+                            <h3 title="The calculated revenue for the miles entered.">Revenue: $<span id="calculatedPay">0.00</span></h3>
+                            <p title="The calculated rate per mile for this load.">Rate: $<span id="ratePerMile">0.00</span>/mile</p>
                         </div>
                         
                         <button type="submit" class="btn btn-success">Add Load</button>
@@ -899,7 +899,7 @@
                             </div>
                             
                             <div class="form-group">
-                                <label for="expenseCategory">Category</label>
+                                <label for="expenseCategory" title="Select the category for this expense.">Category</label>
                                 <select id="expenseCategory" name="expenseCategory" required>
                                     <option value="">Select Category</option>
                                     <option value="fuel-tractor">Fuel - Tractor</option>
@@ -922,7 +922,7 @@
                             </div>
                             
                             <div class="form-group">
-                                <label for="expenseMiles">Miles (if applicable)</label>
+                                <label for="expenseMiles" title="Enter miles for fuel expenses to calculate MPG or other per-mile costs.">Miles (if applicable)</label>
                                 <input type="number" id="expenseMiles" name="expenseMiles" min="0" placeholder="For per-mile expenses">
                             </div>
                         </div>
@@ -948,7 +948,7 @@
                     </div>
                     
                     <div class="pay-cycle-card">
-                        <h3 id="plPeriodTitle">This Month</h3>
+                        <h3 id="plPeriodTitle" title="The selected date range for this P&L statement.">This Month</h3>
                         
                         <div style="margin-bottom: 20px;">
                             <h4 style="color: #27ae60; border-bottom: 1px solid #27ae60; padding-bottom: 5px;">REVENUE</h4>
@@ -976,7 +976,7 @@
                                     <strong id="plTotalMiles">0</strong>
                                 </div>
                                 <div class="pay-cycle-stat">
-                                    <p>Variable Costs:</p>
+                                    <p title="Costs that vary with miles driven, like fuel.">Variable Costs:</p>
                                     <strong id="plVariableCosts">$0.00</strong>
                                 </div>
                                 <div class="pay-cycle-stat" style="background: #fef9e7;">
@@ -990,15 +990,15 @@
                             <h4 style="color: #e74c3c; border-bottom: 1px solid #e74c3c; padding-bottom: 5px;">OPERATING EXPENSES</h4>
                             <div class="pay-cycle-stats" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
                                 <div class="pay-cycle-stat">
-                                    <p>Fixed Costs:</p>
+                                    <p title="Fixed weekly costs like insurance, prorated for the period.">Fixed Costs:</p>
                                     <strong id="plFixedCosts">$0.00</strong>
                                 </div>
                                 <div class="pay-cycle-stat">
-                                    <p>Truck Payment:</p>
+                                    <p title="Your truck payment, prorated for the period.">Truck Payment:</p>
                                     <strong id="plTruckPayment">$0.00</strong>
                                 </div>
                                 <div class="pay-cycle-stat">
-                                    <p>Manual Expenses:</p>
+                                    <p title="Expenses you manually entered, like repairs.">Manual Expenses:</p>
                                     <strong id="plManualExpenses">$0.00</strong>
                                 </div>
                             </div>
@@ -1044,7 +1044,7 @@
                     <p>Pay cycle runs Wednesday to Tuesday (midnight to midnight). Current settlement cycle ends at midnight next Tuesday.</p>
                     <div class="pay-cycle-stats">
                         <div class="pay-cycle-card">
-                            <h3>Current Settlement Cycle (Next Check)</h3>
+                            <h3 title="Revenue and costs for the current Wednesday-to-Tuesday pay cycle.">Current Settlement Cycle (Next Check)</h3>
                             <div class="pay-cycle-stats">
                                 <div class="pay-cycle-stat">
                                     <p>Revenue:</p>
@@ -1065,7 +1065,7 @@
                             </div>
                         </div>
                         <div class="pay-cycle-card">
-                            <h3>Next Settlement Cycle (Following Check)</h3>
+                            <h3 title="Revenue and costs for the next pay cycle.">Next Settlement Cycle (Following Check)</h3>
                             <div class="pay-cycle-stats">
                                 <div class="pay-cycle-stat">
                                     <p>Revenue:</p>
