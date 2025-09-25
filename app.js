@@ -14,8 +14,8 @@ function calculatePay(miles) {
     return miles * 1.12;
 }
 
-// Helper function to get Wednesday-Tuesday settlement cycle boundaries
-function getSettlementCycleBoundaries(referenceDate = new Date()) {
+// Helper functions for settlement cycles (Wednesday to Tuesday)
+function getSettlementCycleBoundaries(referenceDate = new Date(), cycleOffset = 0) {
     var now = new Date(referenceDate);
     var dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     
@@ -23,7 +23,7 @@ function getSettlementCycleBoundaries(referenceDate = new Date()) {
     var daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
     
     var cycleEnd = new Date(now);
-    cycleEnd.setDate(now.getDate() + daysUntilTuesday);
+    cycleEnd.setDate(now.getDate() + daysUntilTuesday + (cycleOffset * 7));
     cycleEnd.setHours(23, 59, 59, 999);
     
     var cycleStart = new Date(cycleEnd);
@@ -33,6 +33,18 @@ function getSettlementCycleBoundaries(referenceDate = new Date()) {
     return { start: cycleStart, end: cycleEnd };
 }
 
+function getLastSettlementCycle() {
+    return getSettlementCycleBoundaries(new Date(), -1);
+}
+
+function getCurrentSettlementCycle() {
+    return getSettlementCycleBoundaries(new Date(), 0);
+}
+
+function getNextSettlementCycle() {
+    return getSettlementCycleBoundaries(new Date(), 1);
+}
+
 // Helper function to calculate prorated fixed costs
 function getProratedFixedCosts(includeLease) {
     const FIXED_COSTS_WEEKLY = 277;
@@ -40,7 +52,7 @@ function getProratedFixedCosts(includeLease) {
     
     var fullWeeklyCosts = FIXED_COSTS_WEEKLY + (includeLease ? TRUCK_PAYMENT_WEEKLY : 0);
     
-    var cycleBoundaries = getSettlementCycleBoundaries();
+    var cycleBoundaries = getCurrentSettlementCycle();
     var now = new Date();
     var cycleStart = cycleBoundaries.start;
     var cycleEnd = cycleBoundaries.end;
@@ -675,7 +687,7 @@ function updateWeeklyGauge() {
     var includeLease = document.getElementById('includeLease').checked;
     
     // Get current settlement cycle boundaries
-    var cycleBoundaries = getSettlementCycleBoundaries();
+    var cycleBoundaries = getCurrentSettlementCycle();
     var cycleStart = cycleBoundaries.start;
     var cycleEnd = cycleBoundaries.end;
     
@@ -791,45 +803,56 @@ function updatePayCyclePreview() {
     var data = loadData();
     const VARIABLE_COST_PER_MILE = 0.372;
     
-    // Get current settlement cycle boundaries
-    var currentCycleBoundaries = getSettlementCycleBoundaries();
+    // Get settlement cycle boundaries
+    var lastCycleBounds = getLastSettlementCycle();
+    var currentCycleBounds = getCurrentSettlementCycle();
+    var nextCycleBounds = getNextSettlementCycle();
     
-    // Calculate next cycle boundaries
-    var nextCycleStart = new Date(currentCycleBoundaries.end);
-    nextCycleStart.setDate(nextCycleStart.getDate() + 1);
-    nextCycleStart.setHours(0, 0, 0, 0);
-    var nextCycleEnd = new Date(nextCycleStart);
-    nextCycleEnd.setDate(nextCycleEnd.getDate() + 6);
-    nextCycleEnd.setHours(23, 59, 59, 999);
+    var lastCycleRevenue = 0, lastCycleMiles = 0;
+    var currentCycleRevenue = 0, currentCycleMiles = 0;
+    var nextCycleRevenue = 0, nextCycleMiles = 0;
 
-    var currentCycleRevenue = 0;
-    var currentCycleMiles = 0;
-    var nextCycleRevenue = 0;
-    var nextCycleMiles = 0;
-
+    // Calculate data for each settlement cycle
     data.loads.forEach(load => {
         var loadDate = new Date(load.date);
-        if (loadDate >= currentCycleBoundaries.start && loadDate <= currentCycleBoundaries.end) {
-            currentCycleRevenue += load.revenue || 0;
-            currentCycleMiles += load.miles || 0;
-        } else if (loadDate >= nextCycleStart && loadDate <= nextCycleEnd) {
-            nextCycleRevenue += load.revenue || 0;
-            nextCycleMiles += load.miles || 0;
+        var revenue = load.revenue || 0;
+        var miles = load.miles || 0;
+        
+        if (loadDate >= lastCycleBounds.start && loadDate <= lastCycleBounds.end) {
+            lastCycleRevenue += revenue;
+            lastCycleMiles += miles;
+        } else if (loadDate >= currentCycleBounds.start && loadDate <= currentCycleBounds.end) {
+            currentCycleRevenue += revenue;
+            currentCycleMiles += miles;
+        } else if (loadDate >= nextCycleBounds.start && loadDate <= nextCycleBounds.end) {
+            nextCycleRevenue += revenue;
+            nextCycleMiles += miles;
         }
     });
 
     // Calculate variable costs and profit for each cycle
+    var lastCycleVariableCosts = lastCycleMiles * VARIABLE_COST_PER_MILE;
+    var lastCycleProfit = lastCycleRevenue - lastCycleVariableCosts;
+    
     var currentCycleVariableCosts = currentCycleMiles * VARIABLE_COST_PER_MILE;
     var currentCycleProfit = currentCycleRevenue - currentCycleVariableCosts;
     
     var nextCycleVariableCosts = nextCycleMiles * VARIABLE_COST_PER_MILE;
     var nextCycleProfit = nextCycleRevenue - nextCycleVariableCosts;
 
+    // Update last cycle display
+    document.getElementById('lastCycleRevenue').textContent = '$' + lastCycleRevenue.toFixed(2);
+    document.getElementById('lastCycleMiles').textContent = lastCycleMiles.toLocaleString();
+    document.getElementById('lastCycleVariableCosts').textContent = '$' + lastCycleVariableCosts.toFixed(2);
+    document.getElementById('lastCycleProfit').textContent = '$' + lastCycleProfit.toFixed(2);
+    
+    // Update current cycle display
     document.getElementById('currentCycleRevenue').textContent = '$' + currentCycleRevenue.toFixed(2);
     document.getElementById('currentCycleMiles').textContent = currentCycleMiles.toLocaleString();
     document.getElementById('currentCycleVariableCosts').textContent = '$' + currentCycleVariableCosts.toFixed(2);
     document.getElementById('currentCycleProfit').textContent = '$' + currentCycleProfit.toFixed(2);
     
+    // Update next cycle display
     document.getElementById('nextCycleRevenue').textContent = '$' + nextCycleRevenue.toFixed(2);
     document.getElementById('nextCycleMiles').textContent = nextCycleMiles.toLocaleString();
     document.getElementById('nextCycleVariableCosts').textContent = '$' + nextCycleVariableCosts.toFixed(2);
@@ -921,7 +944,7 @@ function checkBackupReminder() {
 
 function showBackupReminder() {
     var shouldExport = confirm(
-        "ðŸ“± Backup Reminder\n\n" +
+        "📱 Backup Reminder\n\n" +
         "It's been 30+ days since your last data export.\n\n" +
         "Would you like to backup your trucking data now?\n\n" +
         "This saves your loads and expenses to your device so you don't lose your records."
